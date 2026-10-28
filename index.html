@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="BabaBala">
   <meta name="theme-color" content="#0f172a">
   <title>BabaBala — Kassa və Masa İdarəetməsi</title>
-  <link rel="manifest" href="manifest.json?v=2">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="manifest" href="manifest.json?v=3">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -416,23 +416,51 @@
     </div>
   </div>
 
-  <!-- MODAL 6: BİR DƏFƏLİK ROL SEÇİMİ (iOS PWA / İlk Açılış üçün Fallback Selector) -->
-  <div id="roleSelectorModal" class="modal-overlay confirm-overlay" aria-hidden="true">
+  <!-- MODAL 6: BİR DƏFƏLİK ROL SEÇİMİ VƏ KOD TƏSDİQİ (iOS PWA / İlk Açılış üçün) -->
+  <div id="roleSelectorModal" class="modal-overlay confirm-overlay role-auth-overlay" aria-hidden="true">
     <div class="role-selector-dialog">
-      <h3 class="role-selector-title">Bu cihazın rolu:</h3>
-      <div class="role-selector-options">
-        <button type="button" class="role-select-option-btn role-opt-admin" data-role="admin">
-          <span>👑</span>
-          <span>Müdir (Admin)</span>
-        </button>
-        <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter1">
-          <span>☕</span>
-          <span>1-ci Ofisiant</span>
-        </button>
-        <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter2">
-          <span>☕</span>
-          <span>2-ci Ofisiant</span>
-        </button>
+      <!-- Addım 1: Rol Seçimi -->
+      <div id="roleStepSelect" class="role-step-view">
+        <h3 class="role-selector-title">Bu cihazın rolu:</h3>
+        <div class="role-selector-options">
+          <button type="button" class="role-select-option-btn role-opt-admin" data-role="admin">
+            <span>👑</span>
+            <span>Müdir (Admin)</span>
+          </button>
+          <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter1">
+            <span>☕</span>
+            <span>1-ci Ofisiant</span>
+          </button>
+          <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter2">
+            <span>☕</span>
+            <span>2-ci Ofisiant</span>
+          </button>
+        </div>
+        <button type="button" id="roleCancelSwitchBtn" class="role-cancel-switch-btn" style="display: none;">Ləğv et</button>
+      </div>
+
+      <!-- Addım 2: Seçilmiş Rolun 4 Rəqəmli Kodunun Daxil Edilməsi -->
+      <div id="roleStepPin" class="role-step-view" style="display: none;">
+        <h3 id="rolePinTitle" class="role-selector-title">👑 Müdir (Admin)</h3>
+        <p class="role-pin-subtitle">Hesabı təsdiqləmək üçün 4 rəqəmli kodu daxil edin:</p>
+        <form id="rolePinForm" class="role-pin-form">
+          <input
+            type="password"
+            id="rolePinInput"
+            class="role-pin-input"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="4"
+            placeholder="••••"
+            autocomplete="off"
+            required
+          >
+          <div id="rolePinError" class="role-pin-error" style="display: none;">Kod yanlışdır!</div>
+          <div class="role-pin-actions">
+            <button type="button" id="rolePinBackBtn" class="confirm-btn btn-cancel">‹ Geri</button>
+            <button type="submit" class="confirm-btn btn-confirm-role">Təsdiqlə</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -443,6 +471,6 @@
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

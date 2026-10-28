@@ -19,6 +19,14 @@ const STORAGE_KEY = "bababala_pos_state_v1";
 const ARCHIVE_STORAGE_KEY = "bababala_pos_archive_v1";
 const THEME_STORAGE_KEY = "bababala_theme_v1";
 const ROLE_STORAGE_KEY = "bababala_user_role";
+const ROLE_VERIFIED_KEY = "bababala_role_verified_v1";
+
+// Hər hesab üçün təhlükəsizlik kodları (Bir dəfə seçilib yığıldıqdan sonra həmişəlik yadda qalır)
+const ROLE_PINS = {
+  admin: "2008",
+  waiter1: "1111",
+  waiter2: "2222"
+};
 
 const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -208,26 +216,52 @@ function getRoleDisplayName(role) {
   return "1-ci Ofisiant";
 }
 
-// URL parametrindən (?rol=admin | ?rol=waiter1 | ?rol=waiter2) və ya localStorage-dən rolu təyin etmək
+// URL parametrindən və ya localStorage-dən təsdiqlənmiş rolu təyin etmək
 function resolveUserRoleFromUrlOrStorage() {
+  const savedRole = (localStorage.getItem(ROLE_STORAGE_KEY) || "").trim().toLowerCase();
+  const verifiedRole = (localStorage.getItem(ROLE_VERIFIED_KEY) || "").trim().toLowerCase();
+  const isAlreadyVerified =
+    (savedRole === "admin" || savedRole === "waiter1" || savedRole === "waiter2") &&
+    savedRole === verifiedRole;
+
+  let urlRequestedRole = null;
   try {
     const params = new URLSearchParams(window.location.search);
     const rawParam = (params.get("rol") || "").trim().toLowerCase();
     if (rawParam === "admin" || rawParam === "waiter1" || rawParam === "waiter2") {
-      localStorage.setItem(ROLE_STORAGE_KEY, rawParam);
-      return { role: rawParam, needsSelection: false };
+      urlRequestedRole = rawParam;
     }
   } catch (err) {
     // Ignore URL parse error
   }
 
-  const savedRole = (localStorage.getItem(ROLE_STORAGE_KEY) || "").trim().toLowerCase();
-  if (savedRole === "admin" || savedRole === "waiter1" || savedRole === "waiter2") {
-    return { role: savedRole, needsSelection: false };
+  // Əgər URL-də başqa rol istənilibsə və hələ həmin rol təsdiqlənməyibsə, kod tələb et
+  if (urlRequestedRole && urlRequestedRole !== savedRole) {
+    return {
+      role: isAlreadyVerified ? savedRole : "waiter1",
+      needsSelection: true,
+      preselectedRole: urlRequestedRole,
+      hasVerifiedRole: isAlreadyVerified
+    };
   }
 
-  // Nə URL-də parametr tapıldı, nə də localStorage-də qeyd olunmuş rol var (iOS PWA ilk açılış):
-  return { role: "waiter1", needsSelection: true };
+  // Cihazda artıq kodla təsdiqlənmiş rol varsa, birbaşa həmin hesabda aç (heç nə soruşma)
+  if (isAlreadyVerified) {
+    return {
+      role: savedRole,
+      needsSelection: false,
+      preselectedRole: null,
+      hasVerifiedRole: true
+    };
+  }
+
+  // İlk dəfə açılırsa, rol seçimi + kod pəncərəsini aç
+  return {
+    role: "waiter1",
+    needsSelection: true,
+    preselectedRole: urlRequestedRole,
+    hasVerifiedRole: false
+  };
 }
 
 // Köhnə test məhsul açarlarını təmizləmək
@@ -350,6 +384,8 @@ let currentAppMode = "kafe"; // "kafe" və ya "pencere"
 const initialRoleResolution = resolveUserRoleFromUrlOrStorage();
 let currentUserRole = initialRoleResolution.role; // "admin" | "waiter1" | "waiter2"
 let needsInitialRoleSelection = initialRoleResolution.needsSelection;
+let preselectedRoleForAuth = initialRoleResolution.preselectedRole || null;
+let hasVerifiedRoleOnDevice = initialRoleResolution.hasVerifiedRole || false;
 
 // DOM Elementləri
 const mainScreen = document.getElementById("mainScreen");
@@ -2079,31 +2115,65 @@ function applyRolePermissions() {
 }
 
 // ============================================================================
-// 7B. iOS SAFARI PWA ÜÇÜN BİR DƏFƏLİK ROL SEÇİMİ VƏ 3 TOXUNUŞLA SIFIRLAMA
+// 7B. BİR DƏFƏLİK ROL SEÇİMİ + KOD TƏSDİQİ (2008 / 1111 / 2222) VƏ 3 TOXUNUŞLA DƏYİŞMƏ
 // ============================================================================
+let pendingRoleChoice = null;
+
+function getRoleAuthTitle(role) {
+  if (role === "admin") return "👑 Müdir (Admin)";
+  if (role === "waiter2") return "☕ 2-ci Ofisiant";
+  return "☕ 1-ci Ofisiant";
+}
+
 function ensureRoleSelectorModal() {
   let modalEl = document.getElementById("roleSelectorModal");
   if (!modalEl) {
     modalEl = document.createElement("div");
     modalEl.id = "roleSelectorModal";
-    modalEl.className = "modal-overlay confirm-overlay";
+    modalEl.className = "modal-overlay confirm-overlay role-auth-overlay";
     modalEl.setAttribute("aria-hidden", "true");
     modalEl.innerHTML = `
       <div class="role-selector-dialog">
-        <h3 class="role-selector-title">Bu cihazın rolu:</h3>
-        <div class="role-selector-options">
-          <button type="button" class="role-select-option-btn role-opt-admin" data-role="admin">
-            <span>👑</span>
-            <span>Müdir (Admin)</span>
-          </button>
-          <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter1">
-            <span>☕</span>
-            <span>1-ci Ofisiant</span>
-          </button>
-          <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter2">
-            <span>☕</span>
-            <span>2-ci Ofisiant</span>
-          </button>
+        <div id="roleStepSelect" class="role-step-view">
+          <h3 class="role-selector-title">Bu cihazın rolu:</h3>
+          <div class="role-selector-options">
+            <button type="button" class="role-select-option-btn role-opt-admin" data-role="admin">
+              <span>👑</span>
+              <span>Müdir (Admin)</span>
+            </button>
+            <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter1">
+              <span>☕</span>
+              <span>1-ci Ofisiant</span>
+            </button>
+            <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter2">
+              <span>☕</span>
+              <span>2-ci Ofisiant</span>
+            </button>
+          </div>
+          <button type="button" id="roleCancelSwitchBtn" class="role-cancel-switch-btn" style="display: none;">Ləğv et</button>
+        </div>
+
+        <div id="roleStepPin" class="role-step-view" style="display: none;">
+          <h3 id="rolePinTitle" class="role-selector-title">👑 Müdir (Admin)</h3>
+          <p class="role-pin-subtitle">Hesabı təsdiqləmək üçün 4 rəqəmli kodu daxil edin:</p>
+          <form id="rolePinForm" class="role-pin-form">
+            <input
+              type="password"
+              id="rolePinInput"
+              class="role-pin-input"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="4"
+              placeholder="••••"
+              autocomplete="off"
+              required
+            >
+            <div id="rolePinError" class="role-pin-error" style="display: none;">Kod yanlışdır!</div>
+            <div class="role-pin-actions">
+              <button type="button" id="rolePinBackBtn" class="confirm-btn btn-cancel">‹ Geri</button>
+              <button type="submit" class="confirm-btn btn-confirm-role">Təsdiqlə</button>
+            </div>
+          </form>
         </div>
       </div>
     `;
@@ -2114,17 +2184,102 @@ function ensureRoleSelectorModal() {
     modalEl.querySelectorAll(".role-select-option-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const chosenRole = btn.getAttribute("data-role") || "waiter1";
-        selectAndSaveDeviceRole(chosenRole);
+        showRolePinStep(chosenRole);
       });
     });
+
+    const backBtn = document.getElementById("rolePinBackBtn");
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
+        showRoleSelectionStep();
+      });
+    }
+
+    const cancelSwitchBtn = document.getElementById("roleCancelSwitchBtn");
+    if (cancelSwitchBtn) {
+      cancelSwitchBtn.addEventListener("click", () => {
+        if (hasVerifiedRoleOnDevice) {
+          closeRoleSelectorModal();
+        }
+      });
+    }
+
+    const pinInput = document.getElementById("rolePinInput");
+    const pinForm = document.getElementById("rolePinForm");
+    const pinError = document.getElementById("rolePinError");
+
+    if (pinInput) {
+      pinInput.addEventListener("input", () => {
+        if (pinError) pinError.style.display = "none";
+        const val = pinInput.value.trim();
+        if (val.length === 4 && pendingRoleChoice) {
+          const expectedPin = ROLE_PINS[pendingRoleChoice];
+          if (val === expectedPin) {
+            selectAndSaveDeviceRole(pendingRoleChoice);
+          }
+        }
+      });
+    }
+
+    if (pinForm) {
+      pinForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!pendingRoleChoice || !pinInput) return;
+        const val = pinInput.value.trim();
+        const expectedPin = ROLE_PINS[pendingRoleChoice];
+        if (val === expectedPin) {
+          selectAndSaveDeviceRole(pendingRoleChoice);
+        } else {
+          if (pinError) pinError.style.display = "block";
+          pinInput.value = "";
+          pinInput.focus();
+        }
+      });
+    }
+
     modalEl.dataset.bound = "true";
   }
 
   return modalEl;
 }
 
-function openRoleSelectorModal() {
+function showRoleSelectionStep() {
+  pendingRoleChoice = null;
+  const stepSelect = document.getElementById("roleStepSelect");
+  const stepPin = document.getElementById("roleStepPin");
+  const cancelSwitchBtn = document.getElementById("roleCancelSwitchBtn");
+  if (stepSelect) stepSelect.style.display = "block";
+  if (stepPin) stepPin.style.display = "none";
+  if (cancelSwitchBtn) {
+    cancelSwitchBtn.style.display = hasVerifiedRoleOnDevice ? "block" : "none";
+  }
+}
+
+function showRolePinStep(role) {
+  pendingRoleChoice = (role === "admin" || role === "waiter1" || role === "waiter2") ? role : "waiter1";
+  const stepSelect = document.getElementById("roleStepSelect");
+  const stepPin = document.getElementById("roleStepPin");
+  const pinTitle = document.getElementById("rolePinTitle");
+  const pinInput = document.getElementById("rolePinInput");
+  const pinError = document.getElementById("rolePinError");
+
+  if (stepSelect) stepSelect.style.display = "none";
+  if (stepPin) stepPin.style.display = "block";
+  if (pinTitle) pinTitle.textContent = getRoleAuthTitle(pendingRoleChoice);
+  if (pinError) pinError.style.display = "none";
+  if (pinInput) {
+    pinInput.value = "";
+    setTimeout(() => pinInput.focus(), 60);
+  }
+}
+
+function openRoleSelectorModal(preselectedRole = null) {
   const modalEl = ensureRoleSelectorModal();
+  if (preselectedRole === "admin" || preselectedRole === "waiter1" || preselectedRole === "waiter2") {
+    showRolePinStep(preselectedRole);
+  } else {
+    showRoleSelectionStep();
+  }
   modalEl.classList.add("open");
   modalEl.setAttribute("aria-hidden", "false");
 }
@@ -2139,13 +2294,22 @@ function closeRoleSelectorModal() {
 function selectAndSaveDeviceRole(role) {
   const validRole = (role === "admin" || role === "waiter1" || role === "waiter2") ? role : "waiter1";
   localStorage.setItem(ROLE_STORAGE_KEY, validRole);
+  localStorage.setItem(ROLE_VERIFIED_KEY, validRole);
   currentUserRole = validRole;
   needsInitialRoleSelection = false;
+  hasVerifiedRoleOnDevice = true;
+  if (window.location.search) {
+    try {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (err) {
+      // Ignore history error
+    }
+  }
   closeRoleSelectorModal();
   applyRolePermissions();
 }
 
-// Yuxarıdakı "BabaBala" loqosuna ard-arda 3 dəfə toxunduqda (triple tap) rolu sıfırla və seçim pəncərəsini aç
+// Yuxarıdakı "BabaBala" loqosuna ard-arda 3 dəfə toxunduqda (triple tap) rol seçim və kod pəncərəsini aç
 let logoTapCount = 0;
 let logoLastTapTime = 0;
 
@@ -2165,14 +2329,6 @@ function initBrandLogoTripleTap() {
 
     if (logoTapCount >= 3) {
       logoTapCount = 0;
-      localStorage.removeItem(ROLE_STORAGE_KEY);
-      if (window.location.search) {
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (err) {
-          // Ignore history replace error
-        }
-      }
       openRoleSelectorModal();
     }
   });
@@ -2503,6 +2659,6 @@ initBrandLogoTripleTap();
 applyRolePermissions();
 setAppMode("kafe");
 if (needsInitialRoleSelection) {
-  openRoleSelectorModal();
+  openRoleSelectorModal(preselectedRoleForAuth);
 }
 initFirebaseSync();
