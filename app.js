@@ -1788,84 +1788,12 @@ function buildShiftArchiveRecord(targetState, customDateLabel) {
   };
 }
 
-// Avtomatik Gün Sonu Yoxlaması (Müdir gecə bağlamağı unudarsa, saat 05:00-da yeni iş gününə keçəndə avto-arxivlə və sıfırla)
+// Tarix açarının yenilənməsi (Cihazlararası saat fərqinə görə sifarişlərin öz-özünə silinib arxivə düşməməsi üçün avto-sıfırlama ləğv edildi)
 function checkAndExecuteAutoEndDay() {
   if (!isInitialSyncDone) return;
-
-  const currentKey = getBusinessDateKey();
   if (!state.shiftDateKey) {
-    state.shiftDateKey = currentKey;
+    state.shiftDateKey = getBusinessDateKey();
     state.shiftFullDate = getFormattedBusinessDateAz();
-    saveState();
-    return;
-  }
-
-  if (state.shiftDateKey !== currentKey) {
-    // Ötən gündən açıq qalmış masalar varsa onları da hesabla və bağla
-    (state.tables || []).forEach((table) => {
-      const { totalAmount } = getTableSummary(table);
-      if (totalAmount > 0) {
-        const billItems = [];
-        MENU_CATALOG.forEach((item) => {
-          const qty = Number(table.orders[item.id]) || 0;
-          if (qty > 0) {
-            state.soldItemsSummary[item.id] = (Number(state.soldItemsSummary[item.id]) || 0) + qty;
-            billItems.push({
-              itemId: item.id,
-              name: item.name,
-              qty,
-              price: item.price,
-              unit: item.unit,
-              total: round2(qty * item.price),
-              isCustom: false
-            });
-          }
-        });
-        if (Array.isArray(table.customOrders)) {
-          table.customOrders.forEach((custom) => {
-            const cQty = Number(custom.qty) || 1;
-            const cPrice = Number(custom.price) || 0;
-            const cTotal = round2(cQty * cPrice);
-            state.soldCustomItems.push({ name: custom.name, qty: cQty, total: cTotal });
-            billItems.push({ name: custom.name, qty: cQty, price: cPrice, unit: "ədəd", total: cTotal, isCustom: true });
-          });
-        }
-        state.closedBills.push({
-          id: `bill_auto_${Date.now()}_${table.id}`,
-          tableId: table.id,
-          tableName: table.name,
-          time: "05:00",
-          date: state.shiftFullDate || state.shiftDateKey,
-          totalAmount: round2(totalAmount),
-          closedBy: table.lastWaiter || "waiter1",
-          items: billItems
-        });
-        state.completedSalesTotal = round2(state.completedSalesTotal + totalAmount);
-      }
-    });
-
-    const hadAnyActivity =
-      state.completedSalesTotal > 0 ||
-      state.windowSalesTotal > 0 ||
-      (state.expenses && state.expenses.length > 0) ||
-      (state.closedBills && state.closedBills.length > 0);
-
-    if (hadAnyActivity) {
-      const archive = loadArchive();
-      const record = buildShiftArchiveRecord(
-        state,
-        `${state.shiftFullDate || state.shiftDateKey} (Avto-bağlanma 05:00)`
-      );
-      archive.push(record);
-      saveArchive(archive);
-    }
-
-    state = createDefaultState();
-    saveState();
-    refreshAllActiveViews();
-    if (hadAnyActivity) {
-      showToast("Yeni iş günü başladı. Ötən günün hesabatı avtomatik arxivləndi.");
-    }
   }
 }
 
@@ -2458,7 +2386,7 @@ function pushLiveSync() {
 
   if (firestoreDocRef) {
     firestoreDocRef
-      .set(payload, { merge: true })
+      .set(payload)
       .then(() => {
         updateSyncStatusUI("sync-live", "🟢 Canlı");
       })
@@ -2531,13 +2459,14 @@ function initFirebaseSync() {
 
     // 1. Canlı Növbə Dinləyicisi ("bababala_data/live_shift")
     unsubscribeFirestore = firestoreDocRef.onSnapshot(
-      { includeMetadataChanges: true },
       (docSnap) => {
         updateSyncStatusUI("sync-live", "🟢 Canlı");
 
         if (docSnap.exists) {
           const data = docSnap.data();
-          if (data && data.syncId !== lastPushedSyncId) {
+          // Eyni cihazın öz göndərdiyi əks-səda (echo) paketini təkrar öz üzərinə yazma
+          const isOwnEcho = isInitialSyncDone && data && (data.clientId === CLIENT_ID || data.syncId === lastPushedSyncId);
+          if (data && !isOwnEcho) {
             applyIncomingRemoteSync(data);
           }
           // Köhnə live_shift daxilində arxiv qalmışdısa və yeni shift_archive hələ boşdursa, onu miqrasiya et
@@ -2545,7 +2474,6 @@ function initFirebaseSync() {
             localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(data.archive));
           }
           isInitialSyncDone = true;
-          checkAndExecuteAutoEndDay();
         } else if (!docSnap.metadata.fromCache) {
           // Bazada sənəd hələ yoxdursa, ilkin qoruma bayrağını açıb cari vəziyyəti bazaya yarat
           isInitialSyncDone = true;
@@ -2560,11 +2488,11 @@ function initFirebaseSync() {
 
     // 2. Ayrı Arxiv Dinləyicisi ("bababala_data/shift_archive")
     unsubscribeArchiveFirestore = firestoreArchiveDocRef.onSnapshot(
-      { includeMetadataChanges: true },
       (docSnap) => {
         if (docSnap.exists) {
           const data = docSnap.data();
-          if (data && Array.isArray(data.items) && data.syncId !== lastPushedArchiveSyncId) {
+          const isOwnArchiveEcho = isInitialArchiveSyncDone && data && (data.clientId === CLIENT_ID || data.syncId === lastPushedArchiveSyncId);
+          if (data && Array.isArray(data.items) && !isOwnArchiveEcho) {
             localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(data.items));
             if (archiveModal && archiveModal.classList.contains("open")) {
               renderArchiveModal();
