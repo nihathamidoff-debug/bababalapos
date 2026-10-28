@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="BabaBala">
   <meta name="theme-color" content="#0f172a">
   <title>BabaBala — Kassa və Masa İdarəetməsi</title>
-  <link rel="manifest" href="manifest.json?v=4">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="manifest" href="manifest.json?v=5">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -92,6 +92,14 @@
               <span class="window-total-label">Cəmi Məbləğ:</span>
               <strong id="windowCartTotal" class="window-total-amount">0.00 ₼</strong>
             </div>
+            <div class="payment-method-selector" id="windowPaymentSelector">
+              <button type="button" id="windowPayCashBtn" class="pay-method-btn active" data-method="cash">
+                💵 Nağd
+              </button>
+              <button type="button" id="windowPayCardBtn" class="pay-method-btn" data-method="card">
+                💳 Kart
+              </button>
+            </div>
             <div class="window-cart-actions">
               <button type="button" id="windowClearCartBtn" class="btn-window-clear">Təmizlə</button>
               <button type="button" id="windowCheckoutBtn" class="btn-window-checkout" disabled>Ödənildi / Vur</button>
@@ -133,10 +141,18 @@
         <h2 id="activeTableName" class="panel-title">Masa 1</h2>
         <span id="activeTableBadge" class="table-badge badge-empty">Boş</span>
       </div>
-      <div class="header-spacer"></div>
+      <button type="button" id="openTransferTableBtn" class="transfer-table-header-btn" disabled>
+        🔄 Masanı Köçür
+      </button>
     </header>
 
     <div class="panel-body">
+      <!-- Sürətli Məhsul Axtarışı (Yaşlı ofisiantlar üçün böyük şriftlə) -->
+      <div class="menu-search-wrap">
+        <input type="search" id="menuSearchInput" class="menu-search-input" placeholder="🔍 Məhsul axtar (çay, peraşki, pivə...)" autocomplete="off">
+        <button type="button" id="clearMenuSearchBtn" class="clear-search-btn" style="display: none;" aria-label="Axtarışı təmizlə">✕</button>
+      </div>
+
       <!-- Sifariş Siyahısı -->
       <section class="order-section">
         <div class="subsection-header">
@@ -147,7 +163,7 @@
       </section>
 
       <!-- Bu Masada Əvvəl Bağlanan Hesablar (Yalnız Adminə görünür, '✕' ilə silinə bilir) -->
-      <section id="tableClosedBillsSection" class="table-closed-bills-section" style="display: none;">
+      <section id="tableClosedBillsSection" class="table-closed-bills-section admin-only-el" style="display: none;">
         <div class="subsection-header">
           <h3 class="subsection-title">Bu Masada Əvvəl Bağlananlar</h3>
           <span id="tableClosedBillsTotalPill" class="item-count-pill">0.00 ₼</span>
@@ -155,10 +171,10 @@
         <div id="tableClosedBillsList" class="table-closed-bills-list"></div>
       </section>
 
-      <!-- Tez Seçilən Məhsullar (Sadə Çay +/- qiymətlə, Pivə 1.70, Süzmə Araq 100q) -->
+      <!-- Tez Seçilən Məhsullar (Ən çox sifariş olunan 8 əsas məhsul: Sadə Çay, Peraşki, Qənd/Limon, Çörək, Su və s.) -->
       <section class="Pinned-section">
         <div class="subsection-header">
-          <h3 class="subsection-title">Tez Seçim</h3>
+          <h3 class="subsection-title">Tez Seçim (Ən Çox Sifarişlər)</h3>
           <span class="subsection-hint">Birbaşa masaya əlavə et</span>
         </div>
         <div id="pinnedQuickGrid" class="pinned-quick-grid"></div>
@@ -176,15 +192,20 @@
       </section>
     </div>
 
-    <!-- Masa Hesabı və Bağlama Paneli -->
+    <!-- Masa Hesabı və Düymə Ayrımı (Sifarişi Təsdiqlə vs Hesabı Bağla) -->
     <footer class="panel-footer">
       <div class="bill-summary-row">
         <span class="bill-label">Masanın Toplam Hesabı:</span>
         <strong id="activeTableTotal" class="bill-total-amount">0.00 ₼</strong>
       </div>
-      <button type="button" id="closeBillBtn" class="close-bill-btn">
-        Hesabı Bağla (Ödənildi)
-      </button>
+      <div class="table-action-buttons">
+        <button type="button" id="saveOrderBtn" class="save-order-btn">
+          💾 SİFARİŞİ TƏSDİQLƏ (MASAYA YAZ)
+        </button>
+        <button type="button" id="closeBillBtn" class="close-bill-btn secondary-close-btn">
+          💳 HESABI BAĞLA (ÖDƏNİLDİ)
+        </button>
+      </div>
     </footer>
   </div>
 
@@ -278,11 +299,45 @@
       </div>
 
       <div class="modal-body report-scroll-body">
-        <!-- C) ÜMUMİ YEKUN (HƏR İKİ KASSA) -->
+        <!-- Excel / CSV Yükləmə Düyməsi -->
+        <div class="report-export-bar admin-only-el">
+          <button type="button" id="exportReportCsvBtn" class="export-csv-btn">
+            📥 Excel / Hesabatı Yüklə (CSV)
+          </button>
+        </div>
+
+        <!-- C) ÜMUMİ YEKUN VƏ NAĞD / KART / ATM BÖLGÜSÜ -->
         <div class="net-cash-hero">
-          <span class="net-cash-label">ÜMUMİ XALİS QAZANC (Kafe + Pəncərə)</span>
+          <span class="net-cash-label">💰 ÜMUMİ CƏM (Xalis Kassa: Kafe + Pəncərə)</span>
           <strong id="reportGrandNetCash" class="net-cash-value">0.00 ₼</strong>
           <span id="reportGrandBreakdown" class="net-cash-sub">Kafe: 0.00 ₼ | Pəncərə: 0.00 ₼</span>
+
+          <div class="cash-card-breakdown-grid">
+            <div class="cash-card-stat-box stat-cash">
+              <span class="cash-card-stat-label">💵 Əldə Olan Nağd</span>
+              <strong id="reportCashOnHand" class="cash-card-stat-val">0.00 ₼</strong>
+            </div>
+            <div class="cash-card-stat-box stat-card">
+              <span class="cash-card-stat-label">💳 Kartda Qalan</span>
+              <strong id="reportCardRemaining" class="cash-card-stat-val">0.00 ₼</strong>
+            </div>
+            <div class="cash-card-stat-box stat-total">
+              <span class="cash-card-stat-label">💰 Ümumi Cəm</span>
+              <strong id="reportGrandTotalBox" class="cash-card-stat-val">0.00 ₼</strong>
+            </div>
+          </div>
+
+          <button type="button" id="openAtmTransferBtn" class="atm-transfer-hero-btn">
+            🏧 Kartdan Nağda Çevir (ATM)
+          </button>
+        </div>
+
+        <!-- ATM NAĞDLAŞDIRMA LOGU (Əgər gün ərzində ATM çıxarışı olubsa) -->
+        <div id="reportAtmSection" class="report-block" style="display: none;">
+          <div class="report-block-header">
+            <h4>🏧 ATM NAĞDLAŞDIRMA LOGU (Kart ➔ Nağd)</h4>
+          </div>
+          <div id="reportAtmTransfersList" class="mini-list"></div>
         </div>
 
         <!-- OFİSİANTLAR ÜZRƏ GÜNDƏLİK DÖVRİYYƏ BLOKU -->
@@ -291,6 +346,14 @@
             <h4>👨‍🍳 OFİSİANTLAR ÜZRƏ DÖVRİYYƏ</h4>
           </div>
           <div id="reportWaiterStatsList" class="mini-list"></div>
+        </div>
+
+        <!-- D) 📊 MASALAR ÜZRƏ HESABAT (Bütün Masalar və Pəncərə) -->
+        <div class="report-block">
+          <div class="report-block-header">
+            <h4>📊 MASALAR ÜZRƏ HESABAT (15 Masa &amp; Pəncərə)</h4>
+          </div>
+          <div id="reportPerTableStatsList" class="per-table-stats-grid"></div>
         </div>
 
         <!-- A) 🍽 KAFE KASSASI BLOKU -->
@@ -351,6 +414,12 @@
               <span class="report-card-label">Pəncərə Xərcləri</span>
               <strong id="reportWindowExpenses" class="report-card-value">-0.00 ₼</strong>
             </div>
+          </div>
+
+          <!-- Pəncərə Satış Tranzaksiyaları (Redaktə və Silmə ilə) -->
+          <div class="report-section">
+            <h5 class="mini-title">Pəncərə Satış Çekləri (Tranzaksiyalar)</h5>
+            <div id="reportWindowTransactionsList" class="mini-list"></div>
           </div>
 
           <!-- Pəncərə Məhsullarının Satış Sayı -->
@@ -465,12 +534,170 @@
     </div>
   </div>
 
+  <!-- MODAL 7: HESABI BAĞLA — ÖDƏNİŞ METODU SEÇİMİ (💵 Nağd / 💳 Kart) -->
+  <div id="paymentMethodModal" class="modal-overlay confirm-overlay" aria-hidden="true">
+    <div class="confirm-dialog payment-modal-dialog">
+      <h3 id="payModalTableTitle" class="confirm-title">Masa 1 — Hesabı Bağla</h3>
+      <div id="payModalAmountBadge" class="pay-modal-amount">0.00 ₼</div>
+      <p class="confirm-text">Ödəniş üsulunu seçin:</p>
+      <div class="payment-method-selector payment-modal-choices">
+        <button type="button" id="modalPayCashBtn" class="pay-method-btn active" data-method="cash">
+          💵 Nağd
+        </button>
+        <button type="button" id="modalPayCardBtn" class="pay-method-btn" data-method="card">
+          💳 Kart
+        </button>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="cancelPaymentMethodBtn" class="confirm-btn btn-cancel">Ləğv Et</button>
+        <button type="button" id="confirmCloseBillWithMethodBtn" class="confirm-btn btn-confirm-role">Ödənildi (Bağla)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 8: KARTDAN NAĞDA ÇEVİR (ATM NAĞDLAŞDIRMA) -->
+  <div id="atmTransferModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h3>🏧 Kartdan Nağda Çevir (ATM)</h3>
+        <button type="button" id="closeAtmModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <form id="atmTransferForm" class="modal-body">
+        <div class="atm-balance-banner">
+          <span>Hazırda Kartda Qalan Balans:</span>
+          <strong id="atmModalCardBalance">0.00 ₼</strong>
+        </div>
+        <label class="form-field">
+          <span>ATM-dən nağdlaşdırılan məbləğ (₼)</span>
+          <div class="atm-input-row">
+            <input type="number" id="atmAmountInput" step="0.01" min="0.05" required inputmode="decimal" placeholder="0.00">
+            <button type="button" id="atmFillMaxBtn" class="chip-btn">Tam məbləğ</button>
+          </div>
+        </label>
+        <button type="submit" class="primary-submit-btn btn-blue">Nağd Kassaya Köçür</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 9: BAĞLANMIŞ ÇEKİN REDAKTƏ EDİLMƏSİ (Yalnız Admin) -->
+  <div id="editBillModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet modal-sheet-full">
+      <div class="modal-header">
+        <div>
+          <h3 id="editBillModalTitle">✏️ Çeki Redaktə Et</h3>
+          <span id="editBillModalSub" class="report-date-sub"></span>
+        </div>
+        <button type="button" id="closeEditBillModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <div class="modal-body report-scroll-body">
+        <div class="form-field">
+          <span>Ödəniş üsulu</span>
+          <div class="payment-method-selector">
+            <button type="button" id="editBillCashBtn" class="pay-method-btn active" data-method="cash">
+              💵 Nağd
+            </button>
+            <button type="button" id="editBillCardBtn" class="pay-method-btn" data-method="card">
+              💳 Kart
+            </button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <span>Çekdəki məhsullar (Sayını dəyişin və ya 0 edib silin)</span>
+          <div id="editBillItemsList" class="order-list"></div>
+        </div>
+
+        <div class="form-field">
+          <span>Çekə yeni məhsul əlavə et</span>
+          <div class="edit-bill-add-row">
+            <select id="editBillAddMenuSelect" class="edit-bill-select"></select>
+            <button type="button" id="editBillAddItemBtn" class="chip-btn edit-bill-add-btn">+ Əlavə et</button>
+          </div>
+        </div>
+
+        <div class="edit-bill-summary-bar">
+          <div>
+            <span class="bill-label">Yeni Yekun Məbləğ:</span>
+            <span id="editBillDiffBadge" class="waiter-tag-pill">Fərq: 0.00 ₼</span>
+          </div>
+          <strong id="editBillNewTotal" class="bill-total-amount">0.00 ₼</strong>
+        </div>
+
+        <button type="button" id="saveEditedBillBtn" class="close-bill-btn">
+          Dəyişiklikləri Yadda Saxla
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 10: MASANI BAŞQA MASAYA KÖÇÜR (Masa Transferi) -->
+  <div id="transferTableModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet modal-sheet-full">
+      <div class="modal-header">
+        <div>
+          <h3 id="transferModalTitle">🔄 Masanı Köçür</h3>
+          <span id="transferModalSub" class="report-date-sub">Sifarişləri köçürmək istədiyiniz masanı seçin</span>
+        </div>
+        <button type="button" id="closeTransferModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <div class="modal-body report-scroll-body">
+        <!-- Dolu masa seçildikdə çıxan birləşdirmə təsdiqi -->
+        <div id="transferMergeConfirmBox" class="transfer-merge-confirm-box" style="display: none;">
+          <div class="transfer-merge-title">⚠️ <span id="transferMergePromptText">Masa doludur. Hesablar birləşdirilsin?</span></div>
+          <div class="confirm-actions">
+            <button type="button" id="cancelMergeTransferBtn" class="confirm-btn btn-cancel">Ləğv Et</button>
+            <button type="button" id="confirmMergeTransferBtn" class="confirm-btn btn-confirm-role">Bəli, Birləşdir</button>
+          </div>
+        </div>
+
+        <div id="transferTablesGrid" class="tables-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 11: XƏRCİ REDAKTƏ ET / KEÇMİŞ GÜNƏ XƏRC ƏLAVƏ ET (Yalnız Admin) -->
+  <div id="expenseEditModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h3 id="expenseEditModalTitle">✏️ Xərci Redaktə Et</h3>
+        <button type="button" id="closeExpenseEditModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <form id="expenseEditForm" class="modal-body">
+        <div class="form-field">
+          <span>Kassa növü</span>
+          <div class="expense-type-toggle">
+            <label class="radio-chip">
+              <input type="radio" name="editExpenseType" value="kafe" checked>
+              <span>🍽 Kafe Xərci</span>
+            </label>
+            <label class="radio-chip">
+              <input type="radio" name="editExpenseType" value="pencere">
+              <span>🪟 Pəncərə Xərci</span>
+            </label>
+          </div>
+        </div>
+
+        <label class="form-field">
+          <span>Xərcin adı</span>
+          <input type="text" id="editExpenseTitleInput" required autocomplete="off" placeholder="Xərcin adını yazın...">
+        </label>
+
+        <label class="form-field">
+          <span>Məbləğ (₼)</span>
+          <input type="number" id="editExpenseAmountInput" step="0.01" min="0.05" required inputmode="decimal" placeholder="0.00">
+        </label>
+
+        <button type="submit" id="saveExpenseEditBtn" class="primary-submit-btn">Yadda Saxla</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Bildiriş (Toast) -->
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

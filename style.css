@@ -1825,8 +1825,23 @@ input {
 /* ============================================================================
    ROL SƏLAHİYYƏTLƏRİ VƏ BİR DƏFƏLİK ROL SEÇİMİ MODALI (iOS PWA FALLBACK)
    ============================================================================ */
-body.role-waiter .admin-only-el {
+body.role-waiter .admin-only-el,
+body.role-waiter .edit-record-btn,
+body.role-waiter .delete-record-btn,
+body.role-waiter .delete-expense-btn,
+body.role-waiter .btn-add-archive-expense,
+body.role-waiter .export-csv-btn,
+body.role-waiter .export-csv-btn-mini {
   display: none !important;
+}
+
+.archive-expenses-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 body.role-waiter .bottom-bar {
@@ -2407,4 +2422,660 @@ body.dark-mode .close-bill-btn:disabled,
 body.dark-mode .btn-window-checkout:disabled {
   background: #2a2a2a;
   color: #64748b;
+}
+
+/* ============================================================================
+   GÜN 2 İSTEHSALAT TƏKMİLLƏŞDİRMƏLƏRİ:
+   1. Nağd / Kart Seçimi və Nişanları
+   2. Əldə Olan Nağd / Kartda Qalan / ATM Çıxarışı
+   3. Bağlanmış Çekin Redaktəsi (✏️ Redaktə)
+   4. Masanın Başqa Masaya Köçürülməsi (🔄 Masanı Köçür)
+   ============================================================================ */
+.payment-method-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pay-method-btn {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 2px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.94rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.12s ease;
+}
+
+.pay-method-btn:active {
+  transform: scale(0.97);
+}
+
+.pay-method-btn.active[data-method="cash"] {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.18);
+}
+
+.pay-method-btn.active[data-method="card"] {
+  background: #dbeafe;
+  border-color: #2563eb;
+  color: #1e3a8a;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.18);
+}
+
+.payment-modal-dialog {
+  max-width: 360px;
+}
+
+.pay-modal-amount {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #16a34a;
+  margin-bottom: 8px;
+}
+
+.payment-modal-choices {
+  margin-bottom: 16px;
+}
+
+.payment-modal-choices .pay-method-btn {
+  min-height: 54px;
+  font-size: 1.05rem;
+}
+
+.pay-method-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-left: 5px;
+}
+
+.pay-method-tag.tag-cash {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pay-method-tag.tag-card {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Əldə Olan Nağd / Kartda Qalan / Ümumi Cəm (3-lü Hesabat Qridi) */
+.cash-card-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cash-card-stat-box {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 9px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cash-card-stat-box.stat-cash {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(22, 163, 74, 0.18);
+}
+
+.cash-card-stat-box.stat-card {
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.cash-card-stat-box.stat-total {
+  border-color: rgba(250, 204, 21, 0.45);
+  background: rgba(234, 179, 8, 0.16);
+}
+
+.cash-card-stat-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  line-height: 1.2;
+}
+
+.cash-card-stat-val {
+  font-size: 1.02rem;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.atm-transfer-hero-btn {
+  margin-top: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  border: 1.5px solid rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.28);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.08s ease, background-color 0.12s ease;
+}
+
+.atm-transfer-hero-btn:active {
+  transform: scale(0.98);
+  background: rgba(37, 99, 235, 0.42);
+}
+
+.atm-balance-banner {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  color: #1e3a8a;
+  padding: 11px 14px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.atm-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+/* Bağlanmış Çekin Redaktəsi Düyməsi və Modalı */
+.edit-record-btn {
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex-shrink: 0;
+  transition: transform 0.08s ease;
+}
+
+.edit-record-btn:active {
+  transform: scale(0.92);
+  background: #dbeafe;
+}
+
+.edit-bill-add-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.edit-bill-select {
+  height: 42px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1.5px solid #cbd5e1;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.edit-bill-add-btn {
+  min-height: 42px;
+  padding: 0 14px;
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.edit-bill-summary-bar {
+  background: #f8fafc;
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Masanı Başqa Masaya Köçür Düyməsi və Birləşdirmə Təsdiqi */
+.transfer-table-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(245, 158, 11, 0.22);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fde68a;
+  border-radius: 11px;
+  padding: 8px 11px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  min-height: 40px;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.transfer-table-header-btn:active {
+  transform: scale(0.95);
+}
+
+.transfer-table-header-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.transfer-merge-confirm-box {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.transfer-merge-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #92400e;
+  text-align: center;
+}
+
+/* Qaranlıq Rejim (Dark Mode) Uyğunlaşdırmaları */
+body.dark-mode .pay-method-btn {
+  background: #161616;
+  border-color: #333333;
+  color: #cbd5e1;
+}
+
+body.dark-mode .pay-method-btn.active[data-method="cash"] {
+  background: rgba(22, 163, 74, 0.24);
+  border-color: #4ade80;
+  color: #86efac;
+}
+
+body.dark-mode .pay-method-btn.active[data-method="card"] {
+  background: rgba(37, 99, 235, 0.26);
+  border-color: #60a5fa;
+  color: #93c5fd;
+}
+
+body.dark-mode .pay-method-tag.tag-cash {
+  background: rgba(22, 163, 74, 0.24);
+  color: #86efac;
+}
+
+body.dark-mode .pay-method-tag.tag-card {
+  background: rgba(37, 99, 235, 0.26);
+  color: #93c5fd;
+}
+
+body.dark-mode .atm-balance-banner {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(96, 165, 250, 0.38);
+  color: #bfdbfe;
+}
+
+body.dark-mode .edit-record-btn {
+  background: rgba(37, 99, 235, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #93c5fd;
+}
+
+body.dark-mode .edit-bill-select,
+body.dark-mode .edit-bill-summary-bar {
+  background: #161616;
+  border-color: #333333;
+  color: #f1f5f9;
+}
+
+body.dark-mode .transfer-merge-confirm-box {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: #f59e0b;
+}
+
+body.dark-mode .transfer-merge-title {
+  color: #fde68a;
+}
+
+/* ============================================================================
+   SÜRƏTLİ AXTARIŞ VƏ DÜYMƏ AYRIMI (SİFARİŞİ TƏSDİQLƏ vs HESABI BAĞLA)
+   ============================================================================ */
+.menu-search-wrap {
+  position: relative;
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.menu-search-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 42px 10px 14px;
+  font-size: 1.04rem;
+  font-weight: 700;
+  border-radius: 14px;
+  border: 2px solid #cbd5e1;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.menu-search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: none;
+  background: #94a3b8;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clear-search-btn:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+/* Masa Sifariş Düymələri (Aşağı Panel) */
+.table-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+/* Əsas Böyük Yaşıl Düymə: Sifarişi Masaya Yaz / Təsdiqlə */
+.save-order-btn {
+  width: 100%;
+  min-height: 60px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
+  transition: transform 0.08s ease, background-color 0.12s ease;
+}
+
+.save-order-btn:active {
+  transform: scale(0.98);
+  background: #15803d;
+}
+
+/* İkinci Fərqli Düymə: Yalnız Müştəri Gedəndə Hesabı Bağla (Ödəniş Modalı ilə) */
+.close-bill-btn.secondary-close-btn {
+  width: 100%;
+  min-height: 48px;
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1.5px solid #334155;
+  border-radius: 14px;
+  font-size: 0.98rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+  transition: transform 0.08s ease, background-color 0.12s ease;
+}
+
+.close-bill-btn.secondary-close-btn:active {
+  transform: scale(0.98);
+  background: #0f172a;
+}
+
+.close-bill-btn.secondary-close-btn:disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+  border-color: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+   EXCEL / CSV YÜKLƏMƏ VƏ MASALAR ÜZRƏ HESABAT BLOKLARI
+   ============================================================================ */
+.report-export-bar {
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: stretch;
+}
+
+.export-csv-btn {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 14px;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.28);
+  transition: transform 0.08s ease, background-color 0.12s ease;
+}
+
+.export-csv-btn:active {
+  transform: scale(0.98);
+  background: #059669;
+}
+
+.export-csv-btn-mini {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 10px;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+.export-csv-btn-mini:active {
+  transform: scale(0.95);
+  background: #059669;
+}
+
+/* Masalar Üzrə Statistik Qrid */
+.per-table-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.per-table-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.08s ease;
+}
+
+.per-table-card.has-sales {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+.per-table-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.per-table-name {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.per-table-count {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.per-table-card.has-sales .per-table-count {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.per-table-amount {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #16a34a;
+}
+
+.per-table-card.no-sales .per-table-amount {
+  color: #94a3b8;
+  font-size: 1rem;
+}
+
+.per-table-topitems {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+  line-height: 1.35;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+/* Arxiv Əməliyyat Zolağı və Xərc Əlavə Etmə */
+.archive-day-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1.5px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.btn-add-archive-expense {
+  padding: 6px 14px;
+  border: 1.5px solid #0284c7;
+  border-radius: 10px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: transform 0.08s ease;
+}
+
+.btn-add-archive-expense:active {
+  transform: scale(0.95);
+  background: #bae6fd;
+}
+
+/* Qaranlıq Rejim Əlavələri */
+body.dark-mode .menu-search-input {
+  background: #161616;
+  border-color: #333333;
+  color: #f1f5f9;
+}
+
+body.dark-mode .menu-search-input:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+body.dark-mode .close-bill-btn.secondary-close-btn {
+  background: #27272a;
+  border-color: #3f3f46;
+  color: #f4f4f5;
+}
+
+body.dark-mode .close-bill-btn.secondary-close-btn:disabled {
+  background: #18181b;
+  border-color: #27272a;
+  color: #71717a;
+}
+
+body.dark-mode .per-table-card {
+  background: #18181b;
+  border-color: #27272a;
+}
+
+body.dark-mode .per-table-card.has-sales {
+  background: #1e293b;
+  border-color: #3b82f6;
+}
+
+body.dark-mode .per-table-card.has-sales .per-table-count {
+  background: #1e3a8a;
+  color: #bfdbfe;
+}
+
+body.dark-mode .per-table-topitems {
+  color: #cbd5e1;
+  border-top-color: #334155;
+}
+
+body.dark-mode .btn-add-archive-expense {
+  background: rgba(2, 132, 199, 0.2);
+  border-color: #38bdf8;
+  color: #7dd3fc;
 }

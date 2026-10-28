@@ -12,7 +12,9 @@ const firebaseConfig = {
 const FIREBASE_CONFIG = firebaseConfig;
 
 const FIRESTORE_COLLECTION = "bababala_data";
-const FIRESTORE_DOC_ID = "live_shift";
+// Canlı və təhlükəsiz tranzaksiya / cədvəl sənədləri:
+const FIRESTORE_TABLES_DOC_ID = "live_tables_v2";
+const FIRESTORE_TX_DOC_ID = "live_transactions_v2";
 const FIRESTORE_ARCHIVE_DOC_ID = "shift_archive";
 
 const STORAGE_KEY = "bababala_pos_state_v1";
@@ -78,14 +80,18 @@ const MENU_CATALOG = [
   { id: "xengel", name: "Xəngəl", price: 5.00, category: "quru", unit: "pors" },
   { id: "tusonka", name: "Tuşonka", price: 7.00, category: "quru", unit: "pors" },
   { id: "qovurma", name: "Qovurma", price: 8.00, category: "quru", unit: "pors" },
+  { id: "corek", name: "Çörək", price: 0.50, category: "quru", unit: "ədəd" },
+  { id: "peraski_kafe", name: "Peraşki", price: 0.60, category: "quru", unit: "ədəd" },
 
   // --- İSTİ İÇKİLƏR ---
   { id: "sade_cay", name: "Sadə Çay", price: 2.00, category: "isti_ickiler", unit: "ədəd" },
   { id: "sade_cay_jek", name: "Sadə Çay (1 ₼)", price: 1.00, category: "isti_ickiler", unit: "ədəd" },
+  { id: "qend_limon", name: "Qənd & Limon", price: 1.00, category: "isti_ickiler", unit: "pors" },
   { id: "cay_plitka_sokolad", name: "Çay & Plitka Şokolad", price: 4.00, category: "isti_ickiler", unit: "pors" },
   { id: "kofe", name: "Kofe", price: 1.00, category: "isti_ickiler", unit: "ədəd" },
 
   // --- SOYUQ İÇKİLƏR ---
+  { id: "su_qazsiz_05", name: "Su 0.5l", price: 0.50, category: "soyuq_ickiler", unit: "ədəd" },
   { id: "cola_fanta_033", name: "Cola / Fanta 0.33l", price: 1.00, category: "soyuq_ickiler", unit: "ədəd" },
   { id: "cola_fanta_05", name: "Cola / Fanta 0.5l", price: 2.00, category: "soyuq_ickiler", unit: "ədəd" },
   { id: "cola_fanta_1l", name: "Cola / Fanta 1l", price: 3.00, category: "soyuq_ickiler", unit: "ədəd" },
@@ -287,7 +293,8 @@ function createDefaultState() {
     soldItemsSummary: {},
     soldCustomItems: [],
     expenses: [],
-    closedBills: [],
+    closedBills: [], // Daimi Tranzaksiya Logu (Həm Kafe, həm də Pəncərə çekləri — Source of Truth)
+    atmTransfers: [], // Kart ➔ Nağd (ATM Nağdlaşdırma) qeydləri
     // Pəncərə Satışı:
     windowSalesTotal: 0,
     windowSoldSummary: {},
@@ -295,14 +302,124 @@ function createDefaultState() {
   };
 }
 
+// Hər bir tranzaksiya obyektini standart formata salmaq
+function normalizeTransactionRecord(b) {
+  if (!b || typeof b !== "object") return null;
+  const isPencere = b.source === "pencere" || b.tableId === "pencere";
+  const rawRole = b.closedByRole || b.closedBy || "waiter1";
+  let roleKey = "waiter1";
+  if (rawRole === "admin" || rawRole === "Admin" || rawRole === "Admin (Müdir)") roleKey = "admin";
+  else if (rawRole === "waiter2" || rawRole === "2-ci Ofisiant") roleKey = "waiter2";
+
+  const items = Array.isArray(b.items)
+    ? b.items
+        .map((it) => {
+          const qty = Number(it.qty) || 0;
+          const price = round2(it.price != null ? it.price : (qty > 0 ? (Number(it.total) || 0) / qty : 0));
+          return {
+            itemId: it.itemId || null,
+            customRecordId: it.customRecordId || null,
+            name: it.name || "Məhsul",
+            qty,
+            price,
+            unit: it.unit || "ədəd",
+            total: round2(qty * price),
+            isCustom: Boolean(it.isCustom)
+          };
+        })
+        .filter((it) => it.qty > 0)
+    : [];
+
+  const computedTotal = items.length > 0
+    ? round2(items.reduce((sum, it) => sum + it.total, 0))
+    : round2(b.total != null ? b.total : b.totalAmount);
+
+  return {
+    id: b.id || `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    time: b.time || "00:00",
+    date: b.date || getBusinessDateKey(),
+    dateTimeLabel: b.dateTimeLabel || b.date || getShortDateTimeAz(),
+    source: isPencere ? "pencere" : "kafe",
+    tableId: isPencere ? "pencere" : (b.tableId || "masa_1"),
+    tableName: isPencere ? "Pəncərə" : (b.tableName || "Masa 1"),
+    total: computedTotal,
+    totalAmount: computedTotal,
+    paymentMethod: b.paymentMethod === "card" ? "card" : "cash",
+    items,
+    closedBy: getRoleDisplayName(roleKey),
+    closedByRole: roleKey,
+    deleted: Boolean(b.deleted),
+    updatedAt: Number(b.updatedAt) || Date.now()
+  };
+}
+
+// DAİMİ TRANZAKSİYA LOGUNDAN (SOURCE OF TRUTH) BÜTÜN KASSA VƏ İNVENTAR RƏQƏMLƏRİNİ HESABLAMAQ
+function recalculateShiftTotalsFromLedger(targetState = state) {
+  if (!targetState || typeof targetState !== "object") return;
+
+  const activeBills = (Array.isArray(targetState.closedBills) ? targetState.closedBills : [])
+    .map(normalizeTransactionRecord)
+    .filter((b) => b && !b.deleted && b.total > 0);
+
+  targetState.closedBills = activeBills;
+
+  let cafeTotal = 0;
+  let winTotal = 0;
+  const cafeSoldMap = {};
+  const cafeCustomList = [];
+  const winSoldMap = {};
+
+  activeBills.forEach((tx) => {
+    if (tx.source === "pencere" || tx.tableId === "pencere") {
+      winTotal = round2(winTotal + tx.total);
+      (tx.items || []).forEach((it) => {
+        const winCatalogItem = it.itemId
+          ? WINDOW_MENU_CATALOG.find((m) => m.id === it.itemId)
+          : WINDOW_MENU_CATALOG.find((m) => m.name === it.name);
+        if (winCatalogItem) {
+          winSoldMap[winCatalogItem.id] = (Number(winSoldMap[winCatalogItem.id]) || 0) + (Number(it.qty) || 0);
+        }
+      });
+    } else {
+      cafeTotal = round2(cafeTotal + tx.total);
+      (tx.items || []).forEach((it) => {
+        if (it.isCustom) {
+          cafeCustomList.push({
+            id: it.customRecordId || `sc_${tx.id}_${it.name}`,
+            name: it.name,
+            qty: Number(it.qty) || 1,
+            total: round2(it.total)
+          });
+        } else {
+          const catalogItem = it.itemId
+            ? MENU_CATALOG.find((m) => m.id === it.itemId)
+            : MENU_CATALOG.find((m) => m.name === it.name);
+          if (catalogItem) {
+            cafeSoldMap[catalogItem.id] = (Number(cafeSoldMap[catalogItem.id]) || 0) + (Number(it.qty) || 0);
+          }
+        }
+      });
+    }
+  });
+
+  targetState.completedSalesTotal = round2(cafeTotal);
+  targetState.soldItemsSummary = cafeSoldMap;
+  targetState.soldCustomItems = cafeCustomList;
+  targetState.windowSalesTotal = round2(winTotal);
+  targetState.windowSoldSummary = winSoldMap;
+}
+
 // İstənilən mənbədən (localStorage və ya Firebase) gələn State obyektini normallaşdırmaq
 function normalizeStateObject(parsed) {
   if (!parsed || typeof parsed !== "object") return createDefaultState();
 
   const tables = INITIAL_TABLES.map((initTable) => {
-    const savedTable = Array.isArray(parsed.tables)
-      ? parsed.tables.find((t) => t.id === initTable.id)
-      : null;
+    let savedTable = null;
+    if (Array.isArray(parsed.tables)) {
+      savedTable = parsed.tables.find((t) => t && t.id === initTable.id);
+    } else if (parsed.tables && typeof parsed.tables === "object") {
+      savedTable = parsed.tables[initTable.id] || null;
+    }
     return {
       id: initTable.id,
       name: initTable.name,
@@ -311,34 +428,51 @@ function normalizeStateObject(parsed) {
       customOrders: savedTable && Array.isArray(savedTable.customOrders)
         ? savedTable.customOrders
         : [],
-      lastWaiter: savedTable && savedTable.lastWaiter ? savedTable.lastWaiter : null
+      lastWaiter: savedTable && savedTable.lastWaiter ? savedTable.lastWaiter : null,
+      updatedAt: savedTable && savedTable.updatedAt ? Number(savedTable.updatedAt) : 0
     };
   });
 
-  return {
+  const normalizedState = {
     shiftDateKey: parsed.shiftDateKey || getBusinessDateKey(),
     shiftFullDate: parsed.shiftFullDate || getFormattedBusinessDateAz(),
     tables,
-    completedSalesTotal: round2(parsed.completedSalesTotal),
-    soldItemsSummary: sanitizeOrdersMap(parsed.soldItemsSummary),
-    soldCustomItems: Array.isArray(parsed.soldCustomItems) ? parsed.soldCustomItems : [],
-    expenses: Array.isArray(parsed.expenses) ? parsed.expenses.map((e) => ({
-      ...e,
-      type: e.type === "pencere" ? "pencere" : "kafe",
-      addedBy: e.addedBy || "waiter1"
-    })) : [],
-    closedBills: Array.isArray(parsed.closedBills) ? parsed.closedBills.map((b) => ({
-      ...b,
-      closedBy: b.closedBy || "waiter1"
-    })) : [],
-    windowSalesTotal: round2(parsed.windowSalesTotal),
-    windowSoldSummary: (parsed.windowSoldSummary && typeof parsed.windowSoldSummary === "object")
-      ? parsed.windowSoldSummary
-      : {},
+    completedSalesTotal: 0,
+    soldItemsSummary: {},
+    soldCustomItems: [],
+    expenses: Array.isArray(parsed.expenses)
+      ? parsed.expenses
+          .filter((e) => e && !e.deleted)
+          .map((e) => ({
+            ...e,
+            type: e.type === "pencere" ? "pencere" : "kafe",
+            addedBy: e.addedBy || "waiter1"
+          }))
+      : [],
+    closedBills: Array.isArray(parsed.closedBills)
+      ? parsed.closedBills.map(normalizeTransactionRecord).filter((b) => b && !b.deleted)
+      : [],
+    atmTransfers: Array.isArray(parsed.atmTransfers)
+      ? parsed.atmTransfers
+          .filter((a) => a && !a.deleted && Number(a.amount) > 0)
+          .map((a) => ({
+            id: a.id || `atm_${Date.now()}`,
+            amount: round2(a.amount),
+            time: a.time || "00:00",
+            date: a.date || getBusinessDateKey(),
+            note: a.note || "ATM Nağdlaşdırma",
+            addedBy: a.addedBy || "admin"
+          }))
+      : [],
+    windowSalesTotal: 0,
+    windowSoldSummary: {},
     windowCart: (parsed.windowCart && typeof parsed.windowCart === "object")
       ? parsed.windowCart
       : {}
   };
+
+  recalculateShiftTotalsFromLedger(normalizedState);
+  return normalizedState;
 }
 
 // Vəziyyəti localStorage-dən oxumaq
@@ -364,10 +498,15 @@ function loadArchive() {
   }
 }
 
-// Vəziyyəti həm localStorage-də saxlamaq, həm də Canlı Sinxronizasiyaya (Firebase live_shift) göndərmək
-function saveState() {
+// Lokal yaddaşı yeniləmək (Kassa rəqəmləri həmişə Tranzaksiya Logundan hesablanır)
+function saveStateLocalOnly() {
+  recalculateShiftTotalsFromLedger(state);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  pushLiveSync();
+}
+
+function saveState(options = {}) {
+  saveStateLocalOnly();
+  pushGranularLiveSync(options);
 }
 
 // Keçmiş Günlərin Arxivini saxlamaq və ayrıca "shift_archive" sənədinə sinxronlaşdırmaq
@@ -413,11 +552,16 @@ const windowViewEl = document.getElementById("windowView");
 const windowCartCountPillEl = document.getElementById("windowCartCountPill");
 const windowCartListEl = document.getElementById("windowCartList");
 const windowCartTotalEl = document.getElementById("windowCartTotal");
+const windowPayCashBtn = document.getElementById("windowPayCashBtn");
+const windowPayCardBtn = document.getElementById("windowPayCardBtn");
 const windowClearCartBtn = document.getElementById("windowClearCartBtn");
 const windowCheckoutBtn = document.getElementById("windowCheckoutBtn");
 const windowMenuGridEl = document.getElementById("windowMenuGrid");
 
 const backToMainBtn = document.getElementById("backToMainBtn");
+const openTransferTableBtn = document.getElementById("openTransferTableBtn");
+const menuSearchInput = document.getElementById("menuSearchInput");
+const clearMenuSearchBtn = document.getElementById("clearMenuSearchBtn");
 const activeTableNameEl = document.getElementById("activeTableName");
 const activeTableBadgeEl = document.getElementById("activeTableBadge");
 const orderItemCountEl = document.getElementById("orderItemCount");
@@ -427,6 +571,7 @@ const menuSectionTitleEl = document.getElementById("menuSectionTitle");
 const menuSectionHintEl = document.getElementById("menuSectionHint");
 const quickMenuGridEl = document.getElementById("quickMenuGrid");
 const activeTableTotalEl = document.getElementById("activeTableTotal");
+const saveOrderBtn = document.getElementById("saveOrderBtn");
 const closeBillBtn = document.getElementById("closeBillBtn");
 const tableClosedBillsSectionEl = document.getElementById("tableClosedBillsSection");
 const tableClosedBillsTotalPillEl = document.getElementById("tableClosedBillsTotalPill");
@@ -455,9 +600,17 @@ const openReportBtn = document.getElementById("openReportBtn");
 const reportModal = document.getElementById("reportModal");
 const closeReportModalBtn = document.getElementById("closeReportModalBtn");
 const reportDateSubEl = document.getElementById("reportDateSub");
+const exportReportCsvBtn = document.getElementById("exportReportCsvBtn");
+const reportPerTableStatsListEl = document.getElementById("reportPerTableStatsList");
 
 const reportGrandNetCashEl = document.getElementById("reportGrandNetCash");
 const reportGrandBreakdownEl = document.getElementById("reportGrandBreakdown");
+const reportCashOnHandEl = document.getElementById("reportCashOnHand");
+const reportCardRemainingEl = document.getElementById("reportCardRemaining");
+const reportGrandTotalBoxEl = document.getElementById("reportGrandTotalBox");
+const openAtmTransferBtn = document.getElementById("openAtmTransferBtn");
+const reportAtmSectionEl = document.getElementById("reportAtmSection");
+const reportAtmTransfersListEl = document.getElementById("reportAtmTransfersList");
 const reportWaiterStatsListEl = document.getElementById("reportWaiterStatsList");
 
 const reportCafeNetBadgeEl = document.getElementById("reportCafeNetBadge");
@@ -472,6 +625,7 @@ const reportCafeExpensesListEl = document.getElementById("reportCafeExpensesList
 const reportWindowNetBadgeEl = document.getElementById("reportWindowNetBadge");
 const reportWindowSalesEl = document.getElementById("reportWindowSales");
 const reportWindowExpensesEl = document.getElementById("reportWindowExpenses");
+const reportWindowTransactionsListEl = document.getElementById("reportWindowTransactionsList");
 const reportWindowSoldItemsEl = document.getElementById("reportWindowSoldItems");
 const reportWindowExpensesListEl = document.getElementById("reportWindowExpensesList");
 
@@ -488,29 +642,147 @@ const confirmResetModal = document.getElementById("confirmResetModal");
 const cancelResetBtn = document.getElementById("cancelResetBtn");
 const confirmResetBtn = document.getElementById("confirmResetBtn");
 
+// Ödəniş Metodu (Nağd / Kart) Modalı Elementləri
+const paymentMethodModal = document.getElementById("paymentMethodModal");
+const payModalTableTitleEl = document.getElementById("payModalTableTitle");
+const payModalAmountBadgeEl = document.getElementById("payModalAmountBadge");
+const modalPayCashBtn = document.getElementById("modalPayCashBtn");
+const modalPayCardBtn = document.getElementById("modalPayCardBtn");
+const cancelPaymentMethodBtn = document.getElementById("cancelPaymentMethodBtn");
+const confirmCloseBillWithMethodBtn = document.getElementById("confirmCloseBillWithMethodBtn");
+
+// ATM Nağdlaşdırma Modalı Elementləri
+const atmTransferModal = document.getElementById("atmTransferModal");
+const closeAtmModalBtn = document.getElementById("closeAtmModalBtn");
+const atmTransferForm = document.getElementById("atmTransferForm");
+const atmModalCardBalanceEl = document.getElementById("atmModalCardBalance");
+const atmAmountInput = document.getElementById("atmAmountInput");
+const atmFillMaxBtn = document.getElementById("atmFillMaxBtn");
+
+// Bağlanmış Çekin Redaktəsi Modalı Elementləri
+const editBillModal = document.getElementById("editBillModal");
+const editBillModalTitleEl = document.getElementById("editBillModalTitle");
+const editBillModalSubEl = document.getElementById("editBillModalSub");
+const closeEditBillModalBtn = document.getElementById("closeEditBillModalBtn");
+const editBillCashBtn = document.getElementById("editBillCashBtn");
+const editBillCardBtn = document.getElementById("editBillCardBtn");
+const editBillItemsListEl = document.getElementById("editBillItemsList");
+const editBillAddMenuSelect = document.getElementById("editBillAddMenuSelect");
+const editBillAddItemBtn = document.getElementById("editBillAddItemBtn");
+const editBillDiffBadgeEl = document.getElementById("editBillDiffBadge");
+const editBillNewTotalEl = document.getElementById("editBillNewTotal");
+const saveEditedBillBtn = document.getElementById("saveEditedBillBtn");
+
+// Masanı Başqa Masaya Köçür Modalı Elementləri
+const transferTableModal = document.getElementById("transferTableModal");
+const transferModalTitleEl = document.getElementById("transferModalTitle");
+const transferModalSubEl = document.getElementById("transferModalSub");
+const closeTransferModalBtn = document.getElementById("closeTransferModalBtn");
+const transferMergeConfirmBox = document.getElementById("transferMergeConfirmBox");
+const transferMergePromptText = document.getElementById("transferMergePromptText");
+const cancelMergeTransferBtn = document.getElementById("cancelMergeTransferBtn");
+const confirmMergeTransferBtn = document.getElementById("confirmMergeTransferBtn");
+const transferTablesGridEl = document.getElementById("transferTablesGrid");
+
+// Xərc Redaktə / Keçmiş Günə Xərc Modalı Elementləri
+const expenseEditModal = document.getElementById("expenseEditModal");
+const closeExpenseEditModalBtn = document.getElementById("closeExpenseEditModalBtn");
+const expenseEditForm = document.getElementById("expenseEditForm");
+const expenseEditModalTitleEl = document.getElementById("expenseEditModalTitle");
+const editExpenseTitleInput = document.getElementById("editExpenseTitleInput");
+const editExpenseAmountInput = document.getElementById("editExpenseAmountInput");
+const saveExpenseEditBtn = document.getElementById("saveExpenseEditBtn");
+
 const toastContainer = document.getElementById("toastContainer");
 
+let editingExpenseContext = null; // { expenseId, archiveDayId, isNew }
+let selectedWindowPayMethod = "cash"; // Pəncərə satışı üçün default: 💵 Nağd
+let selectedTablePayMethod = "cash"; // Masa bağlama üçün default: 💵 Nağd
+
 // Xərc Hesablamaları (Kafe və Pəncərə Ayrımı)
-function getCafeExpenses() {
+function getCafeExpenses(targetState = state) {
   return round2(
-    (state.expenses || [])
-      .filter((e) => e.type !== "pencere")
+    (targetState.expenses || [])
+      .filter((e) => !e.deleted && e.type !== "pencere")
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
   );
 }
 
-function getWindowExpenses() {
+function getWindowExpenses(targetState = state) {
   return round2(
-    (state.expenses || [])
-      .filter((e) => e.type === "pencere")
+    (targetState.expenses || [])
+      .filter((e) => !e.deleted && e.type === "pencere")
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
   );
 }
 
-function getTotalExpenses() {
+function getTotalExpenses(targetState = state) {
   return round2(
-    (state.expenses || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+    (targetState.expenses || [])
+      .filter((e) => !e.deleted)
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
   );
+}
+
+// NAĞD, KART VƏ ATM NAĞDLAŞDIRMA HESABLAMASI (Source of Truth)
+function getCashAndCardBreakdown(targetState = state) {
+  const bills = Array.isArray(targetState.closedBills)
+    ? targetState.closedBills.filter((b) => b && !b.deleted)
+    : [];
+
+  let grossCashSales = 0;
+  let grossCardSales = 0;
+  let cafeCashSales = 0;
+  let cafeCardSales = 0;
+  let winCashSales = 0;
+  let winCardSales = 0;
+
+  bills.forEach((b) => {
+    const amt = round2(b.total != null ? b.total : b.totalAmount);
+    const isCard = b.paymentMethod === "card";
+    const isPencere = b.source === "pencere" || b.tableId === "pencere";
+
+    if (isCard) {
+      grossCardSales = round2(grossCardSales + amt);
+      if (isPencere) winCardSales = round2(winCardSales + amt);
+      else cafeCardSales = round2(cafeCardSales + amt);
+    } else {
+      grossCashSales = round2(grossCashSales + amt);
+      if (isPencere) winCashSales = round2(winCashSales + amt);
+      else cafeCashSales = round2(cafeCashSales + amt);
+    }
+  });
+
+  const atmWithdrawnTotal = round2(
+    (targetState.atmTransfers || [])
+      .filter((a) => a && !a.deleted)
+      .reduce((sum, a) => sum + (Number(a.amount) || 0), 0)
+  );
+
+  const totalExpenses = getTotalExpenses(targetState);
+  const cafeExpenses = getCafeExpenses(targetState);
+  const winExpenses = getWindowExpenses(targetState);
+
+  // ATM-dən çıxarılan pul Kart balansından çıxılır və Əldə Olan Nağd kassaya əlavə olunur
+  const cashOnHand = round2(grossCashSales + atmWithdrawnTotal - totalExpenses);
+  const cardRemaining = round2(grossCardSales - atmWithdrawnTotal);
+  const grandTotalNet = round2(cashOnHand + cardRemaining);
+
+  return {
+    grossCashSales,
+    grossCardSales,
+    cafeCashSales,
+    cafeCardSales,
+    winCashSales,
+    winCardSales,
+    atmWithdrawnTotal,
+    totalExpenses,
+    cafeExpenses,
+    winExpenses,
+    cashOnHand,
+    cardRemaining,
+    grandTotalNet
+  };
 }
 
 // Masanın ümumi hesabını və məhsul sayını hesablamaq
@@ -558,32 +830,26 @@ function showToast(message) {
 
 // Yuxarı Başlıqdakı Kassa Məbləğinin Yenilənməsi
 function updateHeaderSales() {
+  recalculateShiftTotalsFromLedger(state);
   currentDateEl.textContent = getFormattedDateAz();
+  const breakdown = getCashAndCardBreakdown(state);
 
   if (currentAppMode === "kafe") {
     const grossSales = round2(state.completedSalesTotal);
-    const kafeExp = getCafeExpenses();
+    const kafeExp = breakdown.cafeExpenses;
     const kafeNet = round2(grossSales - kafeExp);
 
     if (headerSalesLabelEl) headerSalesLabelEl.textContent = "Kafe Xalis Kassa";
     headerTotalSalesEl.textContent = formatMoney(kafeNet);
-    if (kafeExp > 0) {
-      headerSubInfoEl.textContent = `Satış: ${formatMoney(grossSales)} | Xərc: -${kafeExp.toFixed(2)} ₼`;
-    } else {
-      headerSubInfoEl.textContent = `Ümumi satış: ${formatMoney(grossSales)}`;
-    }
+    headerSubInfoEl.textContent = `💵 Nağd: ${formatMoney(breakdown.cashOnHand)} | 💳 Kart: ${formatMoney(breakdown.cardRemaining)}`;
   } else {
     const winSales = round2(state.windowSalesTotal);
-    const winExp = getWindowExpenses();
+    const winExp = breakdown.winExpenses;
     const winNet = round2(winSales - winExp);
 
     if (headerSalesLabelEl) headerSalesLabelEl.textContent = "Pəncərə Xalis Kassa";
     headerTotalSalesEl.textContent = formatMoney(winNet);
-    if (winExp > 0) {
-      headerSubInfoEl.textContent = `Satış: ${formatMoney(winSales)} | Xərc: -${winExp.toFixed(2)} ₼`;
-    } else {
-      headerSubInfoEl.textContent = `Ümumi satış: ${formatMoney(winSales)}`;
-    }
+    headerSubInfoEl.textContent = `Satış: ${formatMoney(winSales)} (💵 ${formatMoney(breakdown.winCashSales)} / 💳 ${formatMoney(breakdown.winCardSales)})`;
   }
 }
 
@@ -607,6 +873,12 @@ function setAppMode(mode) {
 }
 
 // PƏNCƏRƏ SATIŞI FUNKSİYALARI
+function setWindowPaymentMethod(method) {
+  selectedWindowPayMethod = method === "card" ? "card" : "cash";
+  if (windowPayCashBtn) windowPayCashBtn.classList.toggle("active", selectedWindowPayMethod === "cash");
+  if (windowPayCardBtn) windowPayCardBtn.classList.toggle("active", selectedWindowPayMethod === "card");
+}
+
 function getWindowCartSummary() {
   let totalAmount = 0;
   let totalCount = 0;
@@ -636,35 +908,62 @@ function updateWindowCartQty(itemId, delta) {
   } else {
     state.windowCart[itemId] = next;
   }
-  saveState();
+  saveState({ syncWindowCart: true });
   renderWindowScreen();
 }
 
 function clearWindowCart() {
   state.windowCart = {};
-  saveState();
+  saveState({ syncWindowCart: true });
   renderWindowScreen();
 }
 
 function checkoutWindowCart() {
-  const { totalAmount, totalCount } = getWindowCartSummary();
+  const { totalAmount } = getWindowCartSummary();
   if (totalAmount <= 0) return;
 
-  if (!state.windowSoldSummary || typeof state.windowSoldSummary !== "object") {
-    state.windowSoldSummary = {};
-  }
-
+  const billItems = [];
   for (const item of WINDOW_MENU_CATALOG) {
     const qty = Number(state.windowCart[item.id]) || 0;
     if (qty > 0) {
-      state.windowSoldSummary[item.id] = (Number(state.windowSoldSummary[item.id]) || 0) + qty;
+      billItems.push({
+        itemId: item.id,
+        name: item.name,
+        qty,
+        price: item.price,
+        unit: item.unit,
+        total: round2(qty * item.price),
+        isCustom: false
+      });
     }
   }
 
-  state.windowSalesTotal = round2((Number(state.windowSalesTotal) || 0) + totalAmount);
-  state.windowCart = {};
-  saveState();
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const closedByRoleKey = (currentUserRole === "waiter1" || currentUserRole === "waiter2") ? currentUserRole : "admin";
 
+  const txRecord = normalizeTransactionRecord({
+    id: `tx_win_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    time: timeStr,
+    date: getBusinessDateKey(now),
+    dateTimeLabel: getShortDateTimeAz(now),
+    source: "pencere",
+    tableId: "pencere",
+    tableName: "Pəncərə",
+    total: round2(totalAmount),
+    totalAmount: round2(totalAmount),
+    paymentMethod: selectedWindowPayMethod,
+    items: billItems,
+    closedBy: getRoleDisplayName(closedByRoleKey),
+    closedByRole: closedByRoleKey,
+    updatedAt: Date.now()
+  });
+
+  state.closedBills.push(txRecord);
+  state.windowCart = {};
+  setWindowPaymentMethod("cash"); // Növbəti müştəri üçün default Nağd-a qaytar
+
+  saveState({ newTransactions: [txRecord], syncWindowCart: true });
   renderWindowScreen();
   updateHeaderSales();
 }
@@ -821,16 +1120,34 @@ function openTableScreen(tableId) {
   activeTableId = tableId;
   activeCategory = null; // Həmişə 2 sütunlu kvadrat kateqoriya görünüşü ilə açılır
   currentTeaPrice = 2.00;
+  if (menuSearchInput) menuSearchInput.value = "";
+  if (clearMenuSearchBtn) clearMenuSearchBtn.style.display = "none";
   mainScreen.classList.remove("active");
   tableScreen.classList.add("active");
   tableScreen.setAttribute("aria-hidden", "false");
   renderTableScreen();
 }
 
+// Sifarişi Masaya Yaz / Təsdiqlə (Masalar ekranına qayıt, masa dolu/aktiv qalsın)
+function confirmAndSaveActiveTableOrder() {
+  const table = state.tables.find((t) => t.id === activeTableId);
+  if (!table) return;
+
+  const { totalCount, totalAmount } = getTableSummary(table);
+  table.lastWaiter = currentUserRole;
+  table.updatedAt = Date.now();
+
+  saveState({ changedTableIds: [table.id] });
+  closeTableScreen();
+  showToast(totalCount > 0 ? `💾 ${table.name} sifarişi yazıldı (${formatMoney(totalAmount)})` : `${table.name} saxlanıldı`);
+}
+
 // EKRAN 1-ə qayıtmaq
 function closeTableScreen() {
   activeTableId = null;
   activeCategory = null;
+  if (menuSearchInput) menuSearchInput.value = "";
+  if (clearMenuSearchBtn) clearMenuSearchBtn.style.display = "none";
   tableScreen.classList.remove("active");
   tableScreen.setAttribute("aria-hidden", "true");
   mainScreen.classList.add("active");
@@ -869,7 +1186,7 @@ function createMenuItemButton(table, item) {
   return btn;
 }
 
-// TEZ SEÇİM BÖLMƏSİ: Sadə Çay (üzərində 1 ₼ / 2 ₼ çevirmə düyməsi ilə), Pivə 1.70 ₼, Süzmə Araq 100q
+// TEZ SEÇİM BÖLMƏSİ (Ən çox sifariş olunan 8 əsas məhsul: Sadə Çay, Peraşki, Qənd/Limon, Çörək, Su, Pivə, Araq, Kofe)
 function renderPinnedQuickItems(table) {
   pinnedQuickGridEl.innerHTML = "";
 
@@ -911,22 +1228,52 @@ function renderPinnedQuickItems(table) {
 
   pinnedQuickGridEl.appendChild(teaBtn);
 
-  // 2. Süzmə Pivə NZS (0.5l) - 1.70 ₼
-  const piveItem = MENU_CATALOG.find((item) => item.id === "suzme_pive_nzs_05");
-  if (piveItem) {
-    pinnedQuickGridEl.appendChild(createMenuItemButton(table, piveItem));
-  }
+  // Digər 7 ən çox sifariş olunan məhsullar (Nəhəng rahat toxunma blokları)
+  const topEssentialIds = [
+    "qend_limon",
+    "peraski_kafe",
+    "corek",
+    "su_qazsiz_05",
+    "suzme_pive_nzs_05",
+    "suzme_araq_100q",
+    "kofe"
+  ];
 
-  // 3. Süzmə Araq (100 qr) - 2.00 ₼
-  const araq100Item = MENU_CATALOG.find((item) => item.id === "suzme_araq_100q");
-  if (araq100Item) {
-    pinnedQuickGridEl.appendChild(createMenuItemButton(table, araq100Item));
-  }
+  topEssentialIds.forEach((id) => {
+    const item = MENU_CATALOG.find((m) => m.id === id);
+    if (item) {
+      pinnedQuickGridEl.appendChild(createMenuItemButton(table, item));
+    }
+  });
 }
 
-// 2 Sütunlu Kvadrat Kateqoriya Kartları və ya Seçilmiş Kateqoriyanın Məhsulları
+// 2 Sütunlu Kvadrat Kateqoriya Kartları, Seçilmiş Kateqoriyanın Məhsulları və ya Axtarış Nəticələri
 function renderQuickMenu(table) {
   quickMenuGridEl.innerHTML = "";
+
+  const query = menuSearchInput ? menuSearchInput.value.trim().toLowerCase() : "";
+  if (query) {
+    menuSectionTitleEl.textContent = `Axtarış: "${query}"`;
+    menuSectionHintEl.textContent = "Toxunaraq masaya əlavə et";
+
+    const matched = MENU_CATALOG.filter((item) =>
+      item.name.toLowerCase().includes(query) ||
+      item.price.toFixed(2).includes(query)
+    );
+
+    if (matched.length === 0) {
+      quickMenuGridEl.innerHTML = `
+        <div class="empty-order-box" style="grid-column: 1 / -1;">
+          "${query}" adına uyğun məhsul tapılmadı.
+        </div>
+      `;
+    } else {
+      matched.forEach((item) => {
+        quickMenuGridEl.appendChild(createMenuItemButton(table, item));
+      });
+    }
+    return;
+  }
 
   if (!activeCategory) {
     menuSectionTitleEl.textContent = "Menyu Kateqoriyaları";
@@ -1013,6 +1360,14 @@ function renderTableScreen() {
   orderItemCountEl.textContent = `${totalCount} məhsul`;
   activeTableTotalEl.textContent = formatMoney(totalAmount);
   closeBillBtn.disabled = !isBusy;
+  if (saveOrderBtn) {
+    saveOrderBtn.textContent = totalCount > 0
+      ? `💾 SİFARİŞİ TƏSDİQLƏ (${totalCount} MƏHSUL)`
+      : `💾 SİFARİŞİ TƏSDİQLƏ (MASAYA YAZ)`;
+  }
+  if (openTransferTableBtn) {
+    openTransferTableBtn.disabled = !isBusy;
+  }
 
   // Sifariş siyahısını qurmaq
   orderListEl.innerHTML = "";
@@ -1075,9 +1430,9 @@ function renderTableScreen() {
     });
   }
 
-  // Bu masada əvvəl bağlanmış hesabları yalnız Admin roluna göstər ('✕' silmə düyməsi ilə)
+  // Bu masada əvvəl bağlanmış hesabları yalnız Admin roluna göstər ('✏️ Redaktə' və '✕' silmə düyməsi ilə)
   const tableClosedBills = Array.isArray(state.closedBills)
-    ? state.closedBills.filter((b) => b.tableId === table.id)
+    ? state.closedBills.filter((b) => !b.deleted && b.tableId === table.id)
     : [];
 
   if (currentUserRole === "admin" && tableClosedBills.length > 0) {
@@ -1090,22 +1445,30 @@ function renderTableScreen() {
       const card = document.createElement("div");
       card.className = "closed-bill-card";
       const itemsText = (b.items || []).map((it) => `${it.name} × ${it.qty} (${formatMoney(it.total)})`).join(", ") || "Məhsullar qeyd olunmayıb";
-      const waiterLabel = getRoleDisplayName(b.closedBy || "waiter1");
+      const waiterLabel = getRoleDisplayName(b.closedByRole || b.closedBy || "waiter1");
+      const payTagClass = b.paymentMethod === "card" ? "tag-card" : "tag-cash";
+      const payTagText = b.paymentMethod === "card" ? "💳 Kart" : "💵 Nağd";
 
       card.innerHTML = `
         <div class="closed-bill-header">
           <div>
             <span>Hesab #${tableClosedBills.length - idx}</span>
             <span class="waiter-tag-pill">${waiterLabel}</span>
+            <span class="pay-method-tag ${payTagClass}">${payTagText}</span>
           </div>
           <div class="bill-right-actions">
             <span class="closed-bill-time">${b.time}</span>
             <strong class="closed-bill-amount">${formatMoney(b.totalAmount)}</strong>
+            <button type="button" class="edit-record-btn" aria-label="Çeki redaktə et" title="Bu çeki redaktə et">✏️ Redaktə</button>
             <button type="button" class="delete-record-btn" aria-label="Çeki sil" title="Bu çeki sil">✕</button>
           </div>
         </div>
         <div class="closed-bill-items">${itemsText}</div>
       `;
+
+      card.querySelector(".edit-record-btn").addEventListener("click", () => {
+        openEditBillModal(b.id, null);
+      });
 
       card.querySelector(".delete-record-btn").addEventListener("click", () => {
         deleteClosedBillById(b.id);
@@ -1136,7 +1499,8 @@ function updateTableItemQty(tableId, itemId, delta) {
   }
 
   table.lastWaiter = currentUserRole;
-  saveState();
+  table.updatedAt = Date.now();
+  saveState({ changedTableIds: [table.id] });
   renderTableScreen();
 }
 
@@ -1156,7 +1520,8 @@ function updateCustomItemQty(tableId, customId, delta) {
   }
 
   table.lastWaiter = currentUserRole;
-  saveState();
+  table.updatedAt = Date.now();
+  saveState({ changedTableIds: [table.id] });
   renderTableScreen();
 }
 
@@ -1195,13 +1560,189 @@ customItemForm.addEventListener("submit", (e) => {
   });
 
   table.lastWaiter = currentUserRole;
-  saveState();
+  table.updatedAt = Date.now();
+  saveState({ changedTableIds: [table.id] });
   closeCustomItemModal();
   renderTableScreen();
 });
 
-// Hesabı bağlamaq (Ödənildi)
+// ============================================================================
+// 2A. MASA KÖÇÜRMƏ FUNKSİYASI ("🔄 Masanı Köçür" — Boş masaya köçür / Dolu masaya birləşdir)
+// ============================================================================
+let pendingMergeTargetTableId = null;
+
+function openTransferTableModal() {
+  const sourceTable = state.tables.find((t) => t.id === activeTableId);
+  if (!sourceTable) return;
+  const { totalAmount } = getTableSummary(sourceTable);
+  if (totalAmount <= 0) return;
+
+  pendingMergeTargetTableId = null;
+  if (transferMergeConfirmBox) transferMergeConfirmBox.style.display = "none";
+  if (transferModalTitleEl) {
+    transferModalTitleEl.textContent = `🔄 ${sourceTable.name} — Masanı Köçür`;
+  }
+  if (transferModalSubEl) {
+    transferModalSubEl.textContent = `Cari hesab (${formatMoney(totalAmount)}) hansı masaya köçürülsün?`;
+  }
+
+  renderTransferTableChoices(sourceTable);
+  if (transferTableModal) {
+    transferTableModal.classList.add("open");
+    transferTableModal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeTransferTableModal() {
+  pendingMergeTargetTableId = null;
+  if (transferMergeConfirmBox) transferMergeConfirmBox.style.display = "none";
+  if (transferTableModal) {
+    transferTableModal.classList.remove("open");
+    transferTableModal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function renderTransferTableChoices(sourceTable) {
+  if (!transferTablesGridEl) return;
+  transferTablesGridEl.innerHTML = "";
+
+  const otherTables = state.tables.filter((t) => t.id !== sourceTable.id);
+  otherTables.forEach((targetTable) => {
+    const { totalAmount, totalCount } = getTableSummary(targetTable);
+    const isBusy = totalAmount > 0;
+
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `table-card ${isBusy ? "is-busy" : "is-empty"}`;
+    card.innerHTML = `
+      <div class="table-card-top">
+        <span class="table-card-name">${targetTable.name}</span>
+        <span class="table-status-pill">${isBusy ? "Dolu" : "Boş"}</span>
+      </div>
+      <div class="table-card-bottom">
+        <div>
+          <span class="table-card-status-text">${isBusy ? formatMoney(totalAmount) : "Boş"}</span>
+        </div>
+        <span class="table-card-meta">${isBusy ? `${totalCount} sifariş` : "Dərhal köçür"}</span>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      handleSelectTransferTarget(sourceTable.id, targetTable.id);
+    });
+
+    transferTablesGridEl.appendChild(card);
+  });
+}
+
+function handleSelectTransferTarget(sourceId, targetId) {
+  const sourceTable = state.tables.find((t) => t.id === sourceId);
+  const targetTable = state.tables.find((t) => t.id === targetId);
+  if (!sourceTable || !targetTable) return;
+
+  const targetSummary = getTableSummary(targetTable);
+  if (targetSummary.totalAmount > 0) {
+    // Hədəf masa DOLUDUR -> Xəbərdarlıq göstər: "Masa doludur. Hesablar birləşdirilsin?"
+    pendingMergeTargetTableId = targetTable.id;
+    if (transferMergePromptText) {
+      transferMergePromptText.textContent = `${targetTable.name} doludur (${formatMoney(targetSummary.totalAmount)}). Hesablar birləşdirilsin?`;
+    }
+    if (transferMergeConfirmBox) {
+      transferMergeConfirmBox.style.display = "block";
+      transferMergeConfirmBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  } else {
+    // Hədəf masa BOŞDUR -> Dərhal köçür
+    executeTableTransfer(sourceTable.id, targetTable.id);
+  }
+}
+
+function executeTableTransfer(sourceId, targetId) {
+  const sourceTable = state.tables.find((t) => t.id === sourceId);
+  const targetTable = state.tables.find((t) => t.id === targetId);
+  if (!sourceTable || !targetTable || sourceId === targetId) return;
+
+  // Standart menyu sifarişlərini hədəf masanın üstünə əlavə et (birləşdir)
+  if (!targetTable.orders || typeof targetTable.orders !== "object") {
+    targetTable.orders = {};
+  }
+  Object.entries(sourceTable.orders || {}).forEach(([itemId, qty]) => {
+    const numQty = Number(qty) || 0;
+    if (numQty > 0) {
+      targetTable.orders[itemId] = (Number(targetTable.orders[itemId]) || 0) + numQty;
+    }
+  });
+
+  // Sərbəst qiymətli sifarişləri hədəf masaya əlavə et
+  if (!Array.isArray(targetTable.customOrders)) {
+    targetTable.customOrders = [];
+  }
+  if (Array.isArray(sourceTable.customOrders) && sourceTable.customOrders.length > 0) {
+    sourceTable.customOrders.forEach((custom) => {
+      targetTable.customOrders.push({ ...custom });
+    });
+  }
+
+  targetTable.lastWaiter = currentUserRole;
+  targetTable.updatedAt = Date.now();
+
+  // Köhnə masanı tamamilə boşalt
+  sourceTable.orders = {};
+  sourceTable.customOrders = [];
+  sourceTable.lastWaiter = null;
+  sourceTable.updatedAt = Date.now();
+
+  const sourceName = sourceTable.name;
+  const targetName = targetTable.name;
+
+  saveState({ changedTableIds: [sourceTable.id, targetTable.id] });
+  closeTransferTableModal();
+
+  // Köçürüldükdən sonra birbaşa yeni masanın ekranını aç
+  activeTableId = targetTable.id;
+  renderTableScreen();
+  showToast(`${sourceName} ➔ ${targetName} köçürüldü`);
+}
+
+// ============================================================================
+// 2B. HESABI BAĞLAMA VƏ ÖDƏNİŞ METODU SEÇİMİ (💵 Nağd / 💳 Kart)
+// ============================================================================
+function setTablePaymentMethod(method) {
+  selectedTablePayMethod = method === "card" ? "card" : "cash";
+  if (modalPayCashBtn) modalPayCashBtn.classList.toggle("active", selectedTablePayMethod === "cash");
+  if (modalPayCardBtn) modalPayCardBtn.classList.toggle("active", selectedTablePayMethod === "card");
+}
+
+function openPaymentMethodModal() {
+  const table = state.tables.find((t) => t.id === activeTableId);
+  if (!table) return;
+  const { totalAmount } = getTableSummary(table);
+  if (totalAmount <= 0) return;
+
+  setTablePaymentMethod("cash"); // Default: 💵 Nağd
+  if (payModalTableTitleEl) {
+    payModalTableTitleEl.textContent = `${table.name} — Hesabı Bağla`;
+  }
+  if (payModalAmountBadgeEl) {
+    payModalAmountBadgeEl.textContent = formatMoney(totalAmount);
+  }
+  if (paymentMethodModal) {
+    paymentMethodModal.classList.add("open");
+    paymentMethodModal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closePaymentMethodModal() {
+  if (!paymentMethodModal) return;
+  paymentMethodModal.classList.remove("open");
+  paymentMethodModal.setAttribute("aria-hidden", "true");
+}
+
 function closeActiveTableBill() {
+  openPaymentMethodModal();
+}
+
+function confirmCloseActiveTableBill() {
   const table = state.tables.find((t) => t.id === activeTableId);
   if (!table) return;
 
@@ -1213,7 +1754,6 @@ function closeActiveTableBill() {
   MENU_CATALOG.forEach((item) => {
     const qty = Number(table.orders[item.id]) || 0;
     if (qty > 0) {
-      state.soldItemsSummary[item.id] = (Number(state.soldItemsSummary[item.id]) || 0) + qty;
       billItems.push({
         itemId: item.id,
         name: item.name,
@@ -1232,12 +1772,6 @@ function closeActiveTableBill() {
       const cPrice = Number(custom.price) || 0;
       const cTotal = round2(cQty * cPrice);
       const customRecordId = `sc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      state.soldCustomItems.push({
-        id: customRecordId,
-        name: custom.name,
-        qty: cQty,
-        total: cTotal
-      });
       billItems.push({
         customRecordId,
         name: custom.name,
@@ -1257,76 +1791,292 @@ function closeActiveTableBill() {
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-  // Əməliyyatı edən ofisiantı qeyd et
-  const closedByRole = (currentUserRole === "waiter1" || currentUserRole === "waiter2")
+  // Əməliyyatı edən rolu qeyd et ("Admin", "1-ci Ofisiant", "2-ci Ofisiant")
+  const closedByRoleKey = (currentUserRole === "waiter1" || currentUserRole === "waiter2")
     ? currentUserRole
     : (table.lastWaiter || "admin");
 
-  state.closedBills.push({
-    id: `bill_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+  const txRecord = normalizeTransactionRecord({
+    id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     tableId: table.id,
     tableName: table.name,
+    source: "kafe",
     time: timeStr,
-    date: getShortDateTimeAz(now),
+    date: getBusinessDateKey(now),
+    dateTimeLabel: getShortDateTimeAz(now),
+    total: round2(totalAmount),
     totalAmount: round2(totalAmount),
-    closedBy: closedByRole,
-    items: billItems
+    paymentMethod: selectedTablePayMethod,
+    closedBy: getRoleDisplayName(closedByRoleKey),
+    closedByRole: closedByRoleKey,
+    items: billItems,
+    updatedAt: Date.now()
   });
 
-  state.completedSalesTotal = round2(state.completedSalesTotal + totalAmount);
+  state.closedBills.push(txRecord);
 
   table.orders = {};
   table.customOrders = [];
   table.lastWaiter = null;
+  table.updatedAt = Date.now();
 
-  saveState();
+  saveState({
+    changedTableIds: [table.id],
+    newTransactions: [txRecord]
+  });
+
+  closePaymentMethodModal();
   closeTableScreen();
 }
 
-// 3. BAĞLANMIŞ ÇEKİN SİLİNMƏSİ (Test və ya səhv çekləri təmizləmək üçün — Yalnız Admin)
+// ============================================================================
+// 3. BAĞLANMIŞ ÇEKLƏRİN REDAKTƏ EDİLMƏSİ VƏ SİLİNMƏSİ (Yalnız Admin)
+// ============================================================================
+let editingBillContext = null; // { billId, archiveDayId, draftPaymentMethod, draftItems, originalTotal, source }
+
+function openEditBillModal(billId, archiveDayId = null) {
+  if (currentUserRole !== "admin") return;
+
+  let targetBill = null;
+  if (archiveDayId) {
+    const archive = loadArchive();
+    const dayEntry = archive.find((d) => d.id === archiveDayId);
+    if (dayEntry && Array.isArray(dayEntry.closedBills)) {
+      targetBill = dayEntry.closedBills.find((b) => b.id === billId);
+    }
+  } else {
+    targetBill = (state.closedBills || []).find((b) => b.id === billId && !b.deleted);
+  }
+
+  if (!targetBill) return;
+
+  const isPencere = targetBill.source === "pencere" || targetBill.tableId === "pencere";
+  const clonedItems = (targetBill.items || []).map((it) => ({
+    itemId: it.itemId || null,
+    customRecordId: it.customRecordId || null,
+    name: it.name,
+    qty: Number(it.qty) || 1,
+    price: round2(it.price != null ? it.price : ((Number(it.total) || 0) / (Number(it.qty) || 1))),
+    unit: it.unit || "ədəd",
+    total: round2(it.total),
+    isCustom: Boolean(it.isCustom)
+  }));
+
+  editingBillContext = {
+    billId: targetBill.id,
+    archiveDayId: archiveDayId || null,
+    source: isPencere ? "pencere" : "kafe",
+    tableName: targetBill.tableName || (isPencere ? "Pəncərə" : "Masa"),
+    time: targetBill.time || "",
+    originalTotal: round2(targetBill.totalAmount != null ? targetBill.totalAmount : targetBill.total),
+    draftPaymentMethod: targetBill.paymentMethod === "card" ? "card" : "cash",
+    draftItems: clonedItems
+  };
+
+  if (editBillModalTitleEl) {
+    editBillModalTitleEl.textContent = `✏️ Çeki Redaktə Et (${editingBillContext.tableName})`;
+  }
+  if (editBillModalSubEl) {
+    editBillModalSubEl.textContent = `Saat ${editingBillContext.time} • Əvvəlki cəm: ${formatMoney(editingBillContext.originalTotal)}`;
+  }
+
+  populateEditBillMenuSelect(editingBillContext.source);
+  renderEditBillModalContent();
+
+  if (editBillModal) {
+    editBillModal.classList.add("open");
+    editBillModal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeEditBillModal() {
+  editingBillContext = null;
+  if (editBillModal) {
+    editBillModal.classList.remove("open");
+    editBillModal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function populateEditBillMenuSelect(source) {
+  if (!editBillAddMenuSelect) return;
+  editBillAddMenuSelect.innerHTML = "";
+  const catalog = source === "pencere" ? WINDOW_MENU_CATALOG : MENU_CATALOG;
+  catalog.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item.id;
+    opt.textContent = `${item.name} — ${formatMoney(item.price)}`;
+    editBillAddMenuSelect.appendChild(opt);
+  });
+}
+
+function renderEditBillModalContent() {
+  if (!editingBillContext) return;
+
+  if (editBillCashBtn) {
+    editBillCashBtn.classList.toggle("active", editingBillContext.draftPaymentMethod === "cash");
+  }
+  if (editBillCardBtn) {
+    editBillCardBtn.classList.toggle("active", editingBillContext.draftPaymentMethod === "card");
+  }
+
+  if (editBillItemsListEl) {
+    editBillItemsListEl.innerHTML = "";
+    if (editingBillContext.draftItems.length === 0) {
+      editBillItemsListEl.innerHTML = `<div class="mini-empty">Çekdə heç bir məhsul qalmayıb. Menyudan əlavə edin.</div>`;
+    } else {
+      editingBillContext.draftItems.forEach((it, index) => {
+        const lineTotal = round2(it.qty * it.price);
+        it.total = lineTotal;
+
+        const row = document.createElement("div");
+        row.className = "order-row";
+        row.innerHTML = `
+          <div class="order-item-info">
+            <div class="order-item-name">${it.name}</div>
+            <div class="order-item-unit">${formatMoney(it.price)} / ${it.unit || "ədəd"}</div>
+          </div>
+          <div class="order-controls">
+            <button type="button" class="qty-btn qty-minus" aria-label="Azalt">−</button>
+            <span class="order-item-qty">${it.qty}</span>
+            <button type="button" class="qty-btn qty-plus" aria-label="Artır">+</button>
+          </div>
+          <div class="order-item-total">${formatMoney(lineTotal)}</div>
+        `;
+
+        row.querySelector(".qty-minus").addEventListener("click", () => {
+          editingBillContext.draftItems[index].qty -= 1;
+          if (editingBillContext.draftItems[index].qty <= 0) {
+            editingBillContext.draftItems.splice(index, 1);
+          }
+          renderEditBillModalContent();
+        });
+
+        row.querySelector(".qty-plus").addEventListener("click", () => {
+          editingBillContext.draftItems[index].qty += 1;
+          renderEditBillModalContent();
+        });
+
+        editBillItemsListEl.appendChild(row);
+      });
+    }
+  }
+
+  const newTotal = round2(
+    editingBillContext.draftItems.reduce((sum, it) => sum + round2(it.qty * it.price), 0)
+  );
+  const diff = round2(newTotal - editingBillContext.originalTotal);
+
+  if (editBillNewTotalEl) {
+    editBillNewTotalEl.textContent = formatMoney(newTotal);
+  }
+  if (editBillDiffBadgeEl) {
+    const sign = diff > 0 ? "+" : "";
+    editBillDiffBadgeEl.textContent = `Fərq: ${sign}${diff.toFixed(2)} ₼`;
+    editBillDiffBadgeEl.style.color = diff > 0 ? "#16a34a" : (diff < 0 ? "#dc2626" : "#64748b");
+  }
+  if (saveEditedBillBtn) {
+    saveEditedBillBtn.disabled = editingBillContext.draftItems.length === 0;
+  }
+}
+
+function addMenuItemToEditedBill() {
+  if (!editingBillContext || !editBillAddMenuSelect) return;
+  const selectedId = editBillAddMenuSelect.value;
+  if (!selectedId) return;
+
+  const catalog = editingBillContext.source === "pencere" ? WINDOW_MENU_CATALOG : MENU_CATALOG;
+  const catalogItem = catalog.find((m) => m.id === selectedId);
+  if (!catalogItem) return;
+
+  const existing = editingBillContext.draftItems.find(
+    (it) => !it.isCustom && (it.itemId === catalogItem.id || it.name === catalogItem.name)
+  );
+
+  if (existing) {
+    existing.qty += 1;
+    existing.total = round2(existing.qty * existing.price);
+  } else {
+    editingBillContext.draftItems.push({
+      itemId: catalogItem.id,
+      name: catalogItem.name,
+      qty: 1,
+      price: catalogItem.price,
+      unit: catalogItem.unit || "ədəd",
+      total: round2(catalogItem.price),
+      isCustom: false
+    });
+  }
+
+  renderEditBillModalContent();
+}
+
+function saveEditedBillChanges() {
+  if (currentUserRole !== "admin" || !editingBillContext) return;
+  if (editingBillContext.draftItems.length === 0) return;
+
+  const updatedItems = editingBillContext.draftItems.map((it) => ({
+    ...it,
+    qty: Number(it.qty) || 1,
+    price: round2(it.price),
+    total: round2((Number(it.qty) || 1) * round2(it.price))
+  }));
+  const newTotal = round2(updatedItems.reduce((sum, it) => sum + it.total, 0));
+
+  if (editingBillContext.archiveDayId) {
+    // Arxivdəki çeki yenilə və həmin günün statistikasını yenidən hesabla
+    const archive = loadArchive();
+    const dayIdx = archive.findIndex((d) => d.id === editingBillContext.archiveDayId);
+    if (dayIdx === -1) return;
+
+    const dayEntry = archive[dayIdx];
+    if (!Array.isArray(dayEntry.closedBills)) return;
+    const billIdx = dayEntry.closedBills.findIndex((b) => b.id === editingBillContext.billId);
+    if (billIdx === -1) return;
+
+    dayEntry.closedBills[billIdx] = normalizeTransactionRecord({
+      ...dayEntry.closedBills[billIdx],
+      items: updatedItems,
+      total: newTotal,
+      totalAmount: newTotal,
+      paymentMethod: editingBillContext.draftPaymentMethod,
+      updatedAt: Date.now()
+    });
+
+    recalculateArchiveEntryTotals(dayEntry);
+    saveArchive(archive);
+    closeEditBillModal();
+    renderArchiveModal();
+    showToast("Arxivdəki çek yeniləndi!");
+  } else {
+    // Cari növbədəki çeki yenilə (kassa və inventar avtomatik yenidən hesablanır)
+    const billIdx = (state.closedBills || []).findIndex((b) => b.id === editingBillContext.billId);
+    if (billIdx === -1) return;
+
+    const updatedTx = normalizeTransactionRecord({
+      ...state.closedBills[billIdx],
+      items: updatedItems,
+      total: newTotal,
+      totalAmount: newTotal,
+      paymentMethod: editingBillContext.draftPaymentMethod,
+      updatedAt: Date.now()
+    });
+
+    state.closedBills[billIdx] = updatedTx;
+    saveState({ newTransactions: [updatedTx] });
+    closeEditBillModal();
+    refreshAllActiveViews();
+    showToast("Çek redaktə olundu və kassa yeniləndi!");
+  }
+}
+
 function deleteClosedBillById(billId) {
   if (currentUserRole !== "admin") return;
 
   const billIdx = (state.closedBills || []).findIndex((b) => b.id === billId);
   if (billIdx === -1) return;
 
-  const bill = state.closedBills[billIdx];
-  const billAmount = round2(bill.totalAmount);
-
-  // Kassa cəmindən həmin çekin məbləğini çıx
-  state.completedSalesTotal = Math.max(0, round2(state.completedSalesTotal - billAmount));
-
-  // İnventar sayından həmin çekdəki məhsulları çıx
-  if (Array.isArray(bill.items)) {
-    bill.items.forEach((it) => {
-      if (it.isCustom) {
-        if (Array.isArray(state.soldCustomItems)) {
-          const cIdx = state.soldCustomItems.findIndex(
-            (c) => (it.customRecordId && c.id === it.customRecordId) || (c.name === it.name && round2(c.total) === round2(it.total))
-          );
-          if (cIdx !== -1) {
-            state.soldCustomItems.splice(cIdx, 1);
-          }
-        }
-      } else {
-        const catalogItem = it.itemId
-          ? MENU_CATALOG.find((m) => m.id === it.itemId)
-          : MENU_CATALOG.find((m) => m.name === it.name);
-        if (catalogItem && state.soldItemsSummary) {
-          const currentSold = Number(state.soldItemsSummary[catalogItem.id]) || 0;
-          const nextSold = currentSold - (Number(it.qty) || 0);
-          if (nextSold <= 0) {
-            delete state.soldItemsSummary[catalogItem.id];
-          } else {
-            state.soldItemsSummary[catalogItem.id] = nextSold;
-          }
-        }
-      }
-    });
-  }
-
   state.closedBills.splice(billIdx, 1);
-  saveState();
+  saveState({ deletedTransactionIds: [billId] });
   refreshAllActiveViews();
 }
 
@@ -1334,20 +2084,120 @@ function deleteClosedBillById(billId) {
 function deleteWindowSoldItem(itemId) {
   if (currentUserRole !== "admin") return;
   const item = WINDOW_MENU_CATALOG.find((m) => m.id === itemId);
-  if (!item || !state.windowSoldSummary) return;
+  if (!item) return;
 
-  const qty = Number(state.windowSoldSummary[itemId]) || 0;
-  if (qty <= 0) return;
+  const deletedTxIds = [];
+  const modifiedTxs = [];
 
-  const sumToDeduct = round2(qty * item.price);
-  delete state.windowSoldSummary[itemId];
-  state.windowSalesTotal = Math.max(0, round2(state.windowSalesTotal - sumToDeduct));
+  state.closedBills = (state.closedBills || []).filter((tx) => {
+    if (tx.source !== "pencere" && tx.tableId !== "pencere") return true;
+    if (!Array.isArray(tx.items)) return true;
 
-  saveState();
+    const remainingItems = tx.items.filter((it) => it.itemId !== itemId && it.name !== item.name);
+    if (remainingItems.length === tx.items.length) return true;
+
+    if (remainingItems.length === 0) {
+      deletedTxIds.push(tx.id);
+      return false;
+    }
+
+    tx.items = remainingItems;
+    const nextTotal = round2(remainingItems.reduce((s, it) => s + round2(it.total), 0));
+    tx.total = nextTotal;
+    tx.totalAmount = nextTotal;
+    tx.updatedAt = Date.now();
+    modifiedTxs.push(tx);
+    return true;
+  });
+
+  saveState({
+    newTransactions: modifiedTxs,
+    deletedTransactionIds: deletedTxIds
+  });
   refreshAllActiveViews();
 }
 
+// ============================================================================
+// 3B. ATM ÇIXARIŞI (Kart ➔ Nağd Transferi — Yalnız Admin)
+// ============================================================================
+function openAtmTransferModal() {
+  if (currentUserRole !== "admin") return;
+  const breakdown = getCashAndCardBreakdown(state);
+  if (atmModalCardBalanceEl) {
+    atmModalCardBalanceEl.textContent = formatMoney(breakdown.cardRemaining);
+  }
+  if (atmAmountInput) {
+    atmAmountInput.value = breakdown.cardRemaining > 0 ? breakdown.cardRemaining.toFixed(2) : "";
+  }
+  if (atmTransferModal) {
+    atmTransferModal.classList.add("open");
+    atmTransferModal.setAttribute("aria-hidden", "false");
+    setTimeout(() => {
+      if (atmAmountInput) atmAmountInput.focus();
+    }, 60);
+  }
+}
+
+function closeAtmTransferModal() {
+  if (!atmTransferModal) return;
+  atmTransferModal.classList.remove("open");
+  atmTransferModal.setAttribute("aria-hidden", "true");
+  if (atmTransferForm) atmTransferForm.reset();
+}
+
+if (atmFillMaxBtn) {
+  atmFillMaxBtn.addEventListener("click", () => {
+    const breakdown = getCashAndCardBreakdown(state);
+    if (atmAmountInput && breakdown.cardRemaining > 0) {
+      atmAmountInput.value = breakdown.cardRemaining.toFixed(2);
+      atmAmountInput.focus();
+    }
+  });
+}
+
+if (atmTransferForm) {
+  atmTransferForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (currentUserRole !== "admin") return;
+
+    const amount = round2(parseFloat(atmAmountInput.value));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    if (!Array.isArray(state.atmTransfers)) {
+      state.atmTransfers = [];
+    }
+
+    const atmRecord = {
+      id: `atm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      amount,
+      time: timeStr,
+      date: getBusinessDateKey(now),
+      note: "ATM Nağdlaşdırma",
+      addedBy: currentUserRole,
+      updatedAt: Date.now()
+    };
+
+    state.atmTransfers.push(atmRecord);
+    saveState({ newAtmTransfers: [atmRecord] });
+    closeAtmTransferModal();
+    refreshAllActiveViews();
+    showToast(`${formatMoney(amount)} kartdan nağd kassaya köçürüldü!`);
+  });
+}
+
+function deleteAtmTransferById(atmId) {
+  if (currentUserRole !== "admin") return;
+  state.atmTransfers = (state.atmTransfers || []).filter((a) => a.id !== atmId);
+  saveState({ deletedAtmIds: [atmId] });
+  refreshAllActiveViews();
+}
+
+// ============================================================================
 // 4. XƏRC ƏLAVƏETMƏ SİSTEMİ VƏ YENİ TEZ SEÇİMLƏR (Ofisiant və Admin üçün aktiv)
+// ============================================================================
 function renderExpensePresetChips(expenseType) {
   if (!expensePresetChipsEl) return;
   const list = expenseType === "pencere" ? EXPENSE_PRESETS.pencere : EXPENSE_PRESETS.kafe;
@@ -1399,7 +2249,7 @@ function deleteExpenseById(expenseId) {
   if (!target) return;
 
   state.expenses = state.expenses.filter((item) => item.id !== expenseId);
-  saveState();
+  saveState({ deletedExpenseIds: [expenseId] });
   renderExpensesList();
   refreshAllActiveViews();
 }
@@ -1430,18 +2280,190 @@ function renderExpensesList() {
         </div>
         <small style="color:#64748b; font-weight:500;">Saat ${exp.time}${addedByText}</small>
       </div>
-      <div class="expense-row-right">
+      <div class="bill-right-actions">
         <strong style="color:#dc2626">${formatNegativeMoney(exp.amount)}</strong>
-        <button type="button" class="delete-expense-btn" aria-label="Xərci sil">✕</button>
+        <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️</button>
+        <button type="button" class="delete-record-btn" aria-label="Xərci sil">✕</button>
       </div>
     `;
 
-    row.querySelector(".delete-expense-btn").addEventListener("click", () => {
+    row.querySelector(".edit-record-btn").addEventListener("click", () => {
+      openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+    });
+
+    row.querySelector(".delete-record-btn").addEventListener("click", () => {
       deleteExpenseById(exp.id);
     });
 
     expensesListEl.appendChild(row);
   });
+}
+
+// Xərc Redaktəsi və Keçmiş Günə Xərc Əlavə Edilməsi Modalı (Yalnız Admin)
+function openExpenseEditModal({ isNew = false, expenseId = null, archiveDayId = null } = {}) {
+  if (currentUserRole !== "admin") return;
+  if (!expenseEditModal) return;
+
+  editingExpenseContext = { isNew, expenseId, archiveDayId };
+
+  if (isNew) {
+    if (expenseEditModalTitleEl) {
+      expenseEditModalTitleEl.textContent = archiveDayId ? "➕ Keçmiş Günə Xərc Əlavə Et" : "➕ Xərc Əlavə Et";
+    }
+    if (expenseEditForm.elements["editExpenseType"]) {
+      expenseEditForm.elements["editExpenseType"].value = "kafe";
+    }
+    if (editExpenseTitleInput) editExpenseTitleInput.value = "";
+    if (editExpenseAmountInput) editExpenseAmountInput.value = "";
+  } else {
+    if (expenseEditModalTitleEl) {
+      expenseEditModalTitleEl.textContent = "✏️ Xərci Redaktə Et";
+    }
+
+    let targetExp = null;
+    if (archiveDayId) {
+      const archive = loadArchive();
+      const dayEntry = archive.find((d) => d.id === archiveDayId);
+      if (dayEntry && Array.isArray(dayEntry.expenses)) {
+        targetExp = dayEntry.expenses.find((e) => e.id === expenseId);
+      }
+    } else {
+      targetExp = (state.expenses || []).find((e) => e.id === expenseId);
+    }
+
+    if (!targetExp) {
+      showToast("Xərc tapılmadı!");
+      return;
+    }
+
+    if (expenseEditForm.elements["editExpenseType"]) {
+      expenseEditForm.elements["editExpenseType"].value = targetExp.type === "pencere" ? "pencere" : "kafe";
+    }
+    if (editExpenseTitleInput) editExpenseTitleInput.value = targetExp.title || "";
+    if (editExpenseAmountInput) editExpenseAmountInput.value = Number(targetExp.amount) || "";
+  }
+
+  expenseEditModal.classList.add("open");
+  expenseEditModal.setAttribute("aria-hidden", "false");
+  setTimeout(() => {
+    if (editExpenseTitleInput) editExpenseTitleInput.focus();
+  }, 100);
+}
+
+function closeExpenseEditModal() {
+  if (!expenseEditModal) return;
+  expenseEditModal.classList.remove("open");
+  expenseEditModal.setAttribute("aria-hidden", "true");
+  editingExpenseContext = null;
+}
+
+function handleExpenseEditFormSubmit(e) {
+  e.preventDefault();
+  if (currentUserRole !== "admin" || !editingExpenseContext) return;
+
+  const title = (editExpenseTitleInput ? editExpenseTitleInput.value : "").trim();
+  const amount = round2(parseFloat(editExpenseAmountInput ? editExpenseAmountInput.value : 0));
+  const typeRadio = expenseEditForm.elements["editExpenseType"];
+  const expenseType = typeRadio && typeRadio.value === "pencere" ? "pencere" : "kafe";
+
+  if (!title || amount <= 0) {
+    showToast("Zəhmət olmasa xərcin adını və düzgün məbləğ daxil edin!");
+    return;
+  }
+
+  const { isNew, expenseId, archiveDayId } = editingExpenseContext;
+
+  if (archiveDayId) {
+    const archive = loadArchive();
+    const dayEntry = archive.find((d) => d.id === archiveDayId);
+    if (!dayEntry) {
+      showToast("Arxiv günü tapılmadı!");
+      return;
+    }
+
+    if (!Array.isArray(dayEntry.expenses)) dayEntry.expenses = [];
+
+    if (isNew) {
+      const newExp = {
+        id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title,
+        amount,
+        type: expenseType,
+        addedBy: currentUserRole,
+        time: getShortDateTimeAz(),
+        updatedAt: Date.now()
+      };
+      dayEntry.expenses.push(newExp);
+      showToast("Xərc keçmiş günün arxivinə əlavə edildi!");
+    } else {
+      const exp = dayEntry.expenses.find((e) => e.id === expenseId);
+      if (!exp) {
+        showToast("Xərc tapılmadı!");
+        return;
+      }
+      exp.title = title;
+      exp.amount = amount;
+      exp.type = expenseType;
+      exp.updatedAt = Date.now();
+      showToast("Arxivdəki xərc uğurla yeniləndi!");
+    }
+
+    recalculateArchiveEntryTotals(dayEntry);
+    saveArchive(archive);
+    renderArchiveModal();
+    closeExpenseEditModal();
+  } else {
+    if (isNew) {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const newExp = {
+        id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title,
+        amount,
+        type: expenseType,
+        addedBy: currentUserRole,
+        time: timeStr,
+        updatedAt: Date.now()
+      };
+      state.expenses.push(newExp);
+      saveState({ newExpenses: [newExp] });
+      showToast("Xərc kassaya əlavə edildi!");
+    } else {
+      const exp = (state.expenses || []).find((e) => e.id === expenseId);
+      if (!exp) {
+        showToast("Xərc tapılmadı!");
+        return;
+      }
+      exp.title = title;
+      exp.amount = amount;
+      exp.type = expenseType;
+      exp.updatedAt = Date.now();
+      saveState({ newExpenses: [exp] });
+      showToast("Xərc uğurla yeniləndi!");
+    }
+
+    refreshAllActiveViews();
+    if (reportModal && reportModal.classList.contains("open")) {
+      renderReportModal();
+    }
+    if (expenseModal && expenseModal.classList.contains("open")) {
+      renderExpensesList();
+    }
+    closeExpenseEditModal();
+  }
+}
+
+function deleteArchiveExpenseById(archiveDayId, expenseId) {
+  if (currentUserRole !== "admin") return;
+  const archive = loadArchive();
+  const dayEntry = archive.find((d) => d.id === archiveDayId);
+  if (!dayEntry || !Array.isArray(dayEntry.expenses)) return;
+
+  dayEntry.expenses = dayEntry.expenses.filter((e) => e.id !== expenseId);
+  recalculateArchiveEntryTotals(dayEntry);
+  saveArchive(archive);
+  renderArchiveModal();
+  showToast("Xərc arxivdən silindi!");
 }
 
 expenseForm.addEventListener("submit", (e) => {
@@ -1456,16 +2478,19 @@ expenseForm.addEventListener("submit", (e) => {
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-  state.expenses.push({
+  const expRecord = {
     id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     title,
     amount,
     type: expenseType,
     addedBy: currentUserRole,
-    time: timeStr
-  });
+    time: timeStr,
+    updatedAt: Date.now()
+  };
 
-  saveState();
+  state.expenses.push(expRecord);
+
+  saveState({ newExpenses: [expRecord] });
   expenseForm.reset();
   if (expenseForm.elements["expenseType"]) {
     expenseForm.elements["expenseType"].value = expenseType;
@@ -1480,6 +2505,300 @@ expenseForm.addEventListener("submit", (e) => {
   refreshAllActiveViews();
 });
 
+// MASALAR ÜZRƏ HESABAT (15 Masa & Pəncərə Sifariş və Gəlir Statistikası)
+function computePerTableStats(closedBillsArray = []) {
+  const map = new Map();
+
+  INITIAL_TABLES.forEach((t) => {
+    map.set(t.id, {
+      id: t.id,
+      name: t.name,
+      group: t.group,
+      orderCount: 0,
+      totalAmount: 0,
+      itemsMap: {}
+    });
+  });
+
+  map.set("pencere", {
+    id: "pencere",
+    name: "🪟 Pəncərə",
+    group: "pencere",
+    orderCount: 0,
+    totalAmount: 0,
+    itemsMap: {}
+  });
+
+  (closedBillsArray || []).forEach((b) => {
+    if (!b || b.deleted) return;
+    const isPencere = b.source === "pencere" || b.tableId === "pencere";
+    const key = isPencere ? "pencere" : (b.tableId || "masa_1");
+    let entry = map.get(key);
+    if (!entry) {
+      entry = {
+        id: key,
+        name: b.tableName || (isPencere ? "🪟 Pəncərə" : key),
+        group: isPencere ? "pencere" : "kafe",
+        orderCount: 0,
+        totalAmount: 0,
+        itemsMap: {}
+      };
+      map.set(key, entry);
+    }
+    entry.orderCount += 1;
+    entry.totalAmount = round2(entry.totalAmount + (Number(b.totalAmount != null ? b.totalAmount : b.total) || 0));
+
+    (b.items || []).forEach((it) => {
+      const name = it.name || "Məhsul";
+      const qty = Number(it.qty) || 1;
+      entry.itemsMap[name] = (entry.itemsMap[name] || 0) + qty;
+    });
+  });
+
+  return Array.from(map.values());
+}
+
+function renderPerTableStatsGrid(containerEl, closedBillsArray = []) {
+  if (!containerEl) return;
+  containerEl.innerHTML = "";
+  const stats = computePerTableStats(closedBillsArray);
+
+  stats.forEach((stat) => {
+    const card = document.createElement("div");
+    const hasSales = stat.orderCount > 0;
+    card.className = `per-table-card ${hasSales ? "has-sales" : "is-empty"}`;
+
+    const sortedItems = Object.entries(stat.itemsMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, count]) => `${name} × ${count}`)
+      .join(", ");
+
+    const topItemsText = sortedItems || (hasSales ? "Məhsul təfərrüatı yoxdur" : "Sifariş olmayıb");
+
+    card.innerHTML = `
+      <div class="per-table-card-header">
+        <strong>${stat.name}</strong>
+        <span class="per-table-badge">${stat.orderCount} hesab</span>
+      </div>
+      <div class="per-table-amount">${formatMoney(stat.totalAmount)}</div>
+      <div class="per-table-topitems">${topItemsText}</div>
+    `;
+    containerEl.appendChild(card);
+  });
+}
+
+// EXCEL / CSV HESABATI YÜKLƏMƏ (UTF-8 BOM ilə Azərbaycan şriftləri və Nöqtəli Vergül)
+function escapeCsvValue(val) {
+  if (val == null) return '""';
+  const str = String(val).replace(/"/g, '""');
+  return `"${str}"`;
+}
+
+function downloadShiftCsv(targetShift = state, filenamePrefix = "BabaBala_Hesabat") {
+  if (currentUserRole !== "admin") return;
+  if (!targetShift || typeof targetShift !== "object") return;
+
+  recalculateShiftTotalsFromLedger(targetShift);
+  const breakdown = getCashAndCardBreakdown(targetShift);
+
+  const activeBills = (Array.isArray(targetShift.closedBills) ? targetShift.closedBills : [])
+    .filter((b) => b && !b.deleted);
+  const activeExpenses = (Array.isArray(targetShift.expenses) ? targetShift.expenses : [])
+    .filter((e) => e && !e.deleted);
+  const activeAtm = (Array.isArray(targetShift.atmTransfers) ? targetShift.atmTransfers : [])
+    .filter((a) => a && !a.deleted);
+
+  const dateLabel = targetShift.fullDate || targetShift.date || targetShift.shiftFullDate || getFormattedDateAz();
+  const dateKey = targetShift.shiftDateKey || getBusinessDateKey();
+
+  const rows = [];
+  rows.push([escapeCsvValue("BABA BALA ÇAY EVİ VƏ DÖNƏR - GÜNLÜK KASSA HESABATI")].join(";"));
+  rows.push([escapeCsvValue("Hesabat Günü:"), escapeCsvValue(dateLabel)].join(";"));
+  rows.push([escapeCsvValue("İxrac Tarixi və Saatı:"), escapeCsvValue(getShortDateTimeAz())].join(";"));
+  rows.push([]);
+
+  // 1. BAĞLANMIŞ ÇEKLƏR VƏ TRANZAKSİYALAR
+  rows.push([escapeCsvValue("=== 1. BAĞLANMIŞ ÇEKLƏR VƏ SATIŞLAR ===")].join(";"));
+  rows.push([
+    escapeCsvValue("Tarix və Saat"),
+    escapeCsvValue("Masa / Yer"),
+    escapeCsvValue("Satılan Məhsullar və Sayları"),
+    escapeCsvValue("Ödəniş Növü"),
+    escapeCsvValue("Məbləğ (₼)"),
+    escapeCsvValue("Əməliyyatı Edən")
+  ].join(";"));
+
+  if (activeBills.length === 0) {
+    rows.push([escapeCsvValue("Bu gün heç bir hesab bağlanmayıb"), '""', '""', '""', '""', '""'].join(";"));
+  } else {
+    activeBills.forEach((b) => {
+      const itemsSummary = (b.items || []).map((it) => `${it.name} (${it.qty} ${it.unit || "ədəd"})`).join(", ");
+      const payMethodText = b.paymentMethod === "card" ? "Kart" : "Nağd";
+      const billAmt = Number(b.totalAmount != null ? b.totalAmount : b.total) || 0;
+      const actor = b.closedBy || getRoleDisplayName(b.closedByRole);
+      rows.push([
+        escapeCsvValue(b.time || b.dateTimeLabel || ""),
+        escapeCsvValue(b.tableName || (b.source === "pencere" ? "Pəncərə" : b.tableId)),
+        escapeCsvValue(itemsSummary || "—"),
+        escapeCsvValue(payMethodText),
+        escapeCsvValue(billAmt.toFixed(2)),
+        escapeCsvValue(actor)
+      ].join(";"));
+    });
+  }
+  rows.push([]);
+
+  // 2. KASSA XƏRCLƏRİ
+  rows.push([escapeCsvValue("=== 2. KASSA XƏRCLƏRİ ===")].join(";"));
+  rows.push([
+    escapeCsvValue("Saat"),
+    escapeCsvValue("Kassa"),
+    escapeCsvValue("Xərcin Təyinatı"),
+    escapeCsvValue("Məbləğ (₼)"),
+    escapeCsvValue("Qeyd Edən")
+  ].join(";"));
+
+  if (activeExpenses.length === 0) {
+    rows.push([escapeCsvValue("Xərc qeydə alınmayıb"), '""', '""', '""', '""'].join(";"));
+  } else {
+    activeExpenses.forEach((exp) => {
+      const expType = exp.type === "pencere" ? "Pəncərə" : "Kafe";
+      const amt = Number(exp.amount) || 0;
+      rows.push([
+        escapeCsvValue(exp.time || ""),
+        escapeCsvValue(expType),
+        escapeCsvValue(exp.title || ""),
+        escapeCsvValue((-Math.abs(amt)).toFixed(2)),
+        escapeCsvValue(getRoleDisplayName(exp.addedBy))
+      ].join(";"));
+    });
+  }
+  rows.push([]);
+
+  // 3. ATM NAĞDLAŞDIRMA
+  if (activeAtm.length > 0) {
+    rows.push([escapeCsvValue("=== 3. ATM ÇIXARIŞLARI (KARTDAN NAĞDA) ===")].join(";"));
+    rows.push([
+      escapeCsvValue("Saat"),
+      escapeCsvValue("Qeyd"),
+      escapeCsvValue("Məbləğ (₼)"),
+      escapeCsvValue("İcra Edən")
+    ].join(";"));
+    activeAtm.forEach((atm) => {
+      rows.push([
+        escapeCsvValue(atm.time || ""),
+        escapeCsvValue(atm.note || "ATM Nağdlaşdırma"),
+        escapeCsvValue(Number(atm.amount).toFixed(2)),
+        escapeCsvValue(getRoleDisplayName(atm.addedBy))
+      ].join(";"));
+    });
+    rows.push([]);
+  }
+
+  // 4. SATILAN MƏHSULLARIN İNVENTAR XÜLASƏSİ
+  rows.push([escapeCsvValue("=== 4. SATILAN MƏHSULLARIN XÜLASƏSİ (İNVƏNTAR) ===")].join(";"));
+  rows.push([
+    escapeCsvValue("Məhsul"),
+    escapeCsvValue("Kateqoriya / Növ"),
+    escapeCsvValue("Satılan Say"),
+    escapeCsvValue("Ölçü Vahidi"),
+    escapeCsvValue("Cəmi Məbləğ (₼)")
+  ].join(";"));
+
+  const soldCatalog = MENU_CATALOG.filter((it) => (Number((targetShift.soldItemsSummary || {})[it.id]) || 0) > 0);
+  soldCatalog.forEach((it) => {
+    const qty = Number(targetShift.soldItemsSummary[it.id]) || 0;
+    rows.push([
+      escapeCsvValue(it.name),
+      escapeCsvValue("Kafe"),
+      escapeCsvValue(qty),
+      escapeCsvValue(it.unit),
+      escapeCsvValue((qty * it.price).toFixed(2))
+    ].join(";"));
+  });
+
+  (targetShift.soldCustomItems || []).forEach((c) => {
+    rows.push([
+      escapeCsvValue(c.name),
+      escapeCsvValue("Kafe (Sərbəst)"),
+      escapeCsvValue(c.qty || 1),
+      escapeCsvValue("ədəd"),
+      escapeCsvValue(Number(c.total || 0).toFixed(2))
+    ].join(";"));
+  });
+
+  const soldWin = WINDOW_MENU_CATALOG.filter((it) => (Number((targetShift.windowSoldSummary || {})[it.id]) || 0) > 0);
+  soldWin.forEach((it) => {
+    const qty = Number(targetShift.windowSoldSummary[it.id]) || 0;
+    rows.push([
+      escapeCsvValue(it.name),
+      escapeCsvValue("Pəncərə"),
+      escapeCsvValue(qty),
+      escapeCsvValue(it.unit),
+      escapeCsvValue((qty * it.price).toFixed(2))
+    ].join(";"));
+  });
+  rows.push([]);
+
+  // 5. MASALAR ÜZRƏ HESABAT (15 Masa & Pəncərə)
+  rows.push([escapeCsvValue("=== 5. MASALAR ÜZRƏ STATİSTİKA ===")].join(";"));
+  rows.push([
+    escapeCsvValue("Masa / Yer"),
+    escapeCsvValue("Bağlanmış Hesab Sayı"),
+    escapeCsvValue("Cəmi Gəlir (₼)"),
+    escapeCsvValue("Ən Çox Satılan Məhsullar")
+  ].join(";"));
+
+  const tableStats = computePerTableStats(activeBills);
+  tableStats.forEach((st) => {
+    const topStr = Object.entries(st.itemsMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([n, q]) => `${n} × ${q}`)
+      .join(", ");
+    rows.push([
+      escapeCsvValue(st.name),
+      escapeCsvValue(st.orderCount),
+      escapeCsvValue(st.totalAmount.toFixed(2)),
+      escapeCsvValue(topStr || "—")
+    ].join(";"));
+  });
+  rows.push([]);
+
+  // 6. MALİYYƏ VƏ KASSA YEKUNU (BALANS)
+  const cafeGross = round2(targetShift.completedSalesTotal || 0);
+  const winGross = round2(targetShift.windowSalesTotal || 0);
+  const grandGross = round2(cafeGross + winGross);
+
+  rows.push([escapeCsvValue("=== 6. MALİYYƏ VƏ KASSA YEKUNU ===")].join(";"));
+  rows.push([escapeCsvValue("Göstərici"), escapeCsvValue("Məbləğ (₼)")].join(";"));
+  rows.push([escapeCsvValue("Cəmi Kafe Satışı (Gross)"), escapeCsvValue(cafeGross.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("Cəmi Pəncərə Satışı (Gross)"), escapeCsvValue(winGross.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("Ümumi Dövriyyə (Toplam Satış)"), escapeCsvValue(grandGross.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("💵 Cəmi Nağd Satış"), escapeCsvValue(breakdown.grossCashSales.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("💳 Cəmi Kart Satışı"), escapeCsvValue(breakdown.grossCardSales.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("🏧 ATM Nağdlaşdırma (Kart ➔ Nağd)"), escapeCsvValue(breakdown.atmWithdrawnTotal.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("Kafe Xərcləri"), escapeCsvValue((-breakdown.cafeExpenses).toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("Pəncərə Xərcləri"), escapeCsvValue((-breakdown.winExpenses).toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("Toplam Xərclər"), escapeCsvValue((-breakdown.totalExpenses).toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("Xalis Qazanc (Net)"), escapeCsvValue(breakdown.grandTotalNet.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("💵 Əldə Olan Nağd Pul (Kassa)"), escapeCsvValue(breakdown.cashOnHand.toFixed(2))].join(";"));
+  rows.push([escapeCsvValue("💳 Bank Kartında Qalan"), escapeCsvValue(breakdown.cardRemaining.toFixed(2))].join(";"));
+
+  const csvContent = rows.join("\r\n");
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(link);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${filenamePrefix}_${dateKey}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast("📥 Excel / CSV hesabatı uğurla endirildi!");
+}
+
 // Ofisiantlar üzrə bağlanmış masa və dövriyyə statistikasını hesablamaq
 function computeWaiterStats(closedBillsArray) {
   const stats = {
@@ -1489,15 +2808,23 @@ function computeWaiterStats(closedBillsArray) {
   };
 
   (closedBillsArray || []).forEach((b) => {
-    const roleKey = (b.closedBy === "waiter2" || b.closedBy === "admin") ? b.closedBy : "waiter1";
+    if (!b || b.deleted) return;
+    if (b.source === "pencere" || b.tableId === "pencere") return;
+    const rawRole = b.closedByRole || b.closedBy || "waiter1";
+    let roleKey = "waiter1";
+    if (rawRole === "waiter2" || rawRole === "2-ci Ofisiant") roleKey = "waiter2";
+    else if (rawRole === "admin" || rawRole === "Admin") roleKey = "admin";
+
     stats[roleKey].count += 1;
-    stats[roleKey].total = round2(stats[roleKey].total + (Number(b.totalAmount) || 0));
+    stats[roleKey].total = round2(stats[roleKey].total + (Number(b.totalAmount != null ? b.totalAmount : b.total) || 0));
   });
 
   return stats;
 }
 
+// ============================================================================
 // 5. GÜNÜN SONU / KASSA HESABATI EKRANI (Yalnız Admin Səlahiyyəti)
+// ============================================================================
 function openReportModal() {
   if (currentUserRole !== "admin") return;
   renderReportModal();
@@ -1511,31 +2838,71 @@ function closeReportModal() {
 }
 
 function renderReportModal() {
+  recalculateShiftTotalsFromLedger(state);
   reportDateSubEl.textContent = state.shiftFullDate || getFormattedDateAz();
+
+  const breakdown = getCashAndCardBreakdown(state);
 
   // Kafe Hesablamaları
   const cafeGrossSales = round2(state.completedSalesTotal);
-  const cafeExpenses = getCafeExpenses();
+  const cafeExpenses = breakdown.cafeExpenses;
   const cafeNetCash = round2(cafeGrossSales - cafeExpenses);
 
   // Pəncərə Hesablamaları
   const winGrossSales = round2(state.windowSalesTotal);
-  const winExpenses = getWindowExpenses();
+  const winExpenses = breakdown.winExpenses;
   const winNetCash = round2(winGrossSales - winExpenses);
 
   // Ümumi Yekun Xalis Kassa
   const grandNetCash = round2(cafeNetCash + winNetCash);
 
-  // 1. Başlıq Banneri
+  // 1. Başlıq Banneri və 3-lü Kassa Bölgüsü (💵 Əldə Olan Nağd / 💳 Kartda Qalan / 💰 Ümumi Cəm)
   if (reportGrandNetCashEl) reportGrandNetCashEl.textContent = formatMoney(grandNetCash);
   if (reportGrandBreakdownEl) {
     reportGrandBreakdownEl.textContent = `Kafe Xalis: ${formatMoney(cafeNetCash)}  |  Pəncərə Xalis: ${formatMoney(winNetCash)}`;
   }
+  if (reportCashOnHandEl) reportCashOnHandEl.textContent = formatMoney(breakdown.cashOnHand);
+  if (reportCardRemainingEl) reportCardRemainingEl.textContent = formatMoney(breakdown.cardRemaining);
+  if (reportGrandTotalBoxEl) reportGrandTotalBoxEl.textContent = formatMoney(breakdown.grandTotalNet);
+
+  // ATM Nağdlaşdırma Tarixçəsi
+  const atmList = Array.isArray(state.atmTransfers) ? state.atmTransfers.filter((a) => !a.deleted) : [];
+  if (reportAtmSectionEl && reportAtmTransfersListEl) {
+    if (atmList.length === 0) {
+      reportAtmSectionEl.style.display = "none";
+    } else {
+      reportAtmSectionEl.style.display = "block";
+      reportAtmTransfersListEl.innerHTML = "";
+      atmList.slice().reverse().forEach((atm) => {
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>🏧 ${atm.note || "ATM Nağdlaşdırma"} (${atm.time})</span>
+          <div class="bill-right-actions">
+            <strong style="color:#0284c7">💳 ➔ 💵 ${formatMoney(atm.amount)}</strong>
+            <button type="button" class="delete-record-btn" title="ATM qeydini sil">✕</button>
+          </div>
+        `;
+        row.querySelector(".delete-record-btn").addEventListener("click", () => {
+          deleteAtmTransferById(atm.id);
+        });
+        reportAtmTransfersListEl.appendChild(row);
+      });
+    }
+  }
 
   // Ofisiantlar Üzrə Gündəlik Dövriyyə
-  const allClosedBills = Array.isArray(state.closedBills) ? state.closedBills : [];
+  const allActiveTx = Array.isArray(state.closedBills) ? state.closedBills.filter((b) => !b.deleted) : [];
+  const cafeClosedBills = allActiveTx.filter((b) => b.source !== "pencere" && b.tableId !== "pencere");
+  const windowTransactions = allActiveTx.filter((b) => b.source === "pencere" || b.tableId === "pencere");
+
+  // Masalar Üzrə Hesabat (15 Masa & Pəncərə)
+  if (reportPerTableStatsListEl) {
+    renderPerTableStatsGrid(reportPerTableStatsListEl, allActiveTx);
+  }
+
   if (reportWaiterStatsListEl) {
-    const wStats = computeWaiterStats(allClosedBills);
+    const wStats = computeWaiterStats(cafeClosedBills);
     reportWaiterStatsListEl.innerHTML = "";
     ["waiter1", "waiter2", "admin"].forEach((key) => {
       const item = wStats[key];
@@ -1565,14 +2932,14 @@ function renderReportModal() {
     openTablesWarningBox.style.display = "none";
   }
 
-  // Kafe Masaları üzrə Bağlanmış Hesablar ('✕' silmə düyməsi ilə)
+  // Kafe Masaları üzrə Bağlanmış Hesablar ('✏️ Redaktə' və '✕' silmə düyməsi ilə)
   reportTableBillsListEl.innerHTML = "";
 
-  if (allClosedBills.length === 0) {
+  if (cafeClosedBills.length === 0) {
     reportTableBillsListEl.innerHTML = `<div class="mini-empty">Bu gün hələ heç bir masada hesab bağlanmayıb.</div>`;
   } else {
     const tableMap = new Map();
-    allClosedBills.forEach((bill) => {
+    cafeClosedBills.forEach((bill) => {
       if (!tableMap.has(bill.tableId)) {
         tableMap.set(bill.tableId, {
           tableName: bill.tableName,
@@ -1602,20 +2969,27 @@ function renderReportModal() {
 
       entry.bills.forEach((b, idx) => {
         const itemsStr = (b.items || []).map((it) => `${it.name} × ${it.qty}`).join(", ");
-        const waiterLabel = getRoleDisplayName(b.closedBy || "waiter1");
+        const waiterLabel = getRoleDisplayName(b.closedByRole || b.closedBy || "waiter1");
+        const payTagClass = b.paymentMethod === "card" ? "tag-card" : "tag-cash";
+        const payTagText = b.paymentMethod === "card" ? "💳 Kart" : "💵 Nağd";
 
         const subItem = document.createElement("div");
         subItem.className = "report-bill-sub-item";
         subItem.innerHTML = `
           <div class="report-bill-sub-left">
-            <span>Hesab #${idx + 1} (${b.time}) <span class="waiter-tag-pill">${waiterLabel}</span></span>
+            <span>Hesab #${idx + 1} (${b.time}) <span class="waiter-tag-pill">${waiterLabel}</span> <span class="pay-method-tag ${payTagClass}">${payTagText}</span></span>
             ${itemsStr ? `<span class="report-bill-sub-items">${itemsStr}</span>` : ""}
           </div>
           <div class="bill-right-actions">
             <strong>${formatMoney(b.totalAmount)}</strong>
+            <button type="button" class="edit-record-btn" title="Bu çeki redaktə et">✏️ Redaktə</button>
             <button type="button" class="delete-record-btn" title="Bu çeki sil">✕</button>
           </div>
         `;
+
+        subItem.querySelector(".edit-record-btn").addEventListener("click", () => {
+          openEditBillModal(b.id, null);
+        });
 
         subItem.querySelector(".delete-record-btn").addEventListener("click", () => {
           deleteClosedBillById(b.id);
@@ -1660,9 +3034,9 @@ function renderReportModal() {
     });
   }
 
-  // Kafe Xərcləri Siyahısı ('✕' ilə silmək imkanı)
+  // Kafe Xərcləri Siyahısı ('✏️ Redaktə' və '✕' ilə silmək imkanı)
   reportCafeExpensesListEl.innerHTML = "";
-  const cafeExpensesList = (state.expenses || []).filter((e) => e.type !== "pencere");
+  const cafeExpensesList = (state.expenses || []).filter((e) => !e.deleted && e.type !== "pencere");
   if (cafeExpensesList.length === 0) {
     reportCafeExpensesListEl.innerHTML = `<div class="mini-empty">Bu gün kafe xərci qeydə alınmayıb.</div>`;
   } else {
@@ -1673,9 +3047,13 @@ function renderReportModal() {
         <span>${exp.title} (${exp.time}):</span>
         <div class="bill-right-actions">
           <strong style="color:#dc2626">${formatMoney(exp.amount)}</strong>
+          <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
           <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
         </div>
       `;
+      row.querySelector(".edit-record-btn").addEventListener("click", () => {
+        openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+      });
       row.querySelector(".delete-record-btn").addEventListener("click", () => {
         deleteExpenseById(exp.id);
         renderReportModal();
@@ -1688,6 +3066,41 @@ function renderReportModal() {
   if (reportWindowNetBadgeEl) reportWindowNetBadgeEl.textContent = `Xalis: ${formatMoney(winNetCash)}`;
   if (reportWindowSalesEl) reportWindowSalesEl.textContent = formatMoney(winGrossSales);
   if (reportWindowExpensesEl) reportWindowExpensesEl.textContent = formatNegativeMoney(winExpenses);
+
+  // Pəncərə Çekləri Siyahısı ('✏️ Redaktə' və '✕' ilə silmək imkanı)
+  if (reportWindowTransactionsListEl) {
+    reportWindowTransactionsListEl.innerHTML = "";
+    if (windowTransactions.length === 0) {
+      reportWindowTransactionsListEl.innerHTML = `<div class="mini-empty">Bu gün pəncərə satışı qeydə alınmayıb.</div>`;
+    } else {
+      windowTransactions.slice().reverse().forEach((wTx, idx) => {
+        const itemsStr = (wTx.items || []).map((it) => `${it.name} × ${it.qty}`).join(", ");
+        const payTagClass = wTx.paymentMethod === "card" ? "tag-card" : "tag-cash";
+        const payTagText = wTx.paymentMethod === "card" ? "💳 Kart" : "💵 Nağd";
+
+        const row = document.createElement("div");
+        row.className = "report-bill-sub-item";
+        row.innerHTML = `
+          <div class="report-bill-sub-left">
+            <span>Pəncərə #${windowTransactions.length - idx} (${wTx.time}) <span class="pay-method-tag ${payTagClass}">${payTagText}</span></span>
+            ${itemsStr ? `<span class="report-bill-sub-items">${itemsStr}</span>` : ""}
+          </div>
+          <div class="bill-right-actions">
+            <strong>${formatMoney(wTx.totalAmount)}</strong>
+            <button type="button" class="edit-record-btn" title="Pəncərə çekini redaktə et">✏️ Redaktə</button>
+            <button type="button" class="delete-record-btn" title="Pəncərə çekini sil">✕</button>
+          </div>
+        `;
+        row.querySelector(".edit-record-btn").addEventListener("click", () => {
+          openEditBillModal(wTx.id, null);
+        });
+        row.querySelector(".delete-record-btn").addEventListener("click", () => {
+          deleteClosedBillById(wTx.id);
+        });
+        reportWindowTransactionsListEl.appendChild(row);
+      });
+    }
+  }
 
   // Pəncərə Satılan Məhsullar (Dürmək və Peraşki Sayı — '✕' ilə silmək imkanı)
   reportWindowSoldItemsEl.innerHTML = "";
@@ -1717,9 +3130,9 @@ function renderReportModal() {
     });
   }
 
-  // Pəncərə Xərcləri Siyahısı ('✕' ilə silmək imkanı)
+  // Pəncərə Xərcləri Siyahısı ('✏️ Redaktə' və '✕' ilə silmək imkanı)
   reportWindowExpensesListEl.innerHTML = "";
-  const winExpensesList = (state.expenses || []).filter((e) => e.type === "pencere");
+  const winExpensesList = (state.expenses || []).filter((e) => !e.deleted && e.type === "pencere");
   if (winExpensesList.length === 0) {
     reportWindowExpensesListEl.innerHTML = `<div class="mini-empty">Bu gün pəncərə xərci qeydə alınmayıb.</div>`;
   } else {
@@ -1730,9 +3143,13 @@ function renderReportModal() {
         <span>${exp.title} (${exp.time}):</span>
         <div class="bill-right-actions">
           <strong style="color:#dc2626">${formatMoney(exp.amount)}</strong>
+          <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
           <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
         </div>
       `;
+      row.querySelector(".edit-record-btn").addEventListener("click", () => {
+        openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+      });
       row.querySelector(".delete-record-btn").addEventListener("click", () => {
         deleteExpenseById(exp.id);
         renderReportModal();
@@ -1745,26 +3162,41 @@ function renderReportModal() {
 // ============================================================================
 // 6. NÖVBƏ BAĞLAMA, AVTOMATİK GÜN SONU SIFIRLANMASI VƏ XÜSUSİ ARXİV BÖLMƏSİ
 // ============================================================================
+function recalculateArchiveEntryTotals(entry) {
+  if (!entry || typeof entry !== "object") return;
+  recalculateShiftTotalsFromLedger(entry);
+  const breakdown = getCashAndCardBreakdown(entry);
+
+  entry.cafeGross = round2(entry.completedSalesTotal);
+  entry.cafeExp = breakdown.cafeExpenses;
+  entry.cafeNet = round2(entry.cafeGross - entry.cafeExp);
+
+  entry.winGross = round2(entry.windowSalesTotal);
+  entry.winExp = breakdown.winExpenses;
+  entry.winNet = round2(entry.winGross - entry.winExp);
+
+  entry.grossSales = round2(entry.cafeGross + entry.winGross);
+  entry.totalExpenses = breakdown.totalExpenses;
+  entry.netCash = breakdown.grandTotalNet;
+  entry.cashOnHand = breakdown.cashOnHand;
+  entry.cardRemaining = breakdown.cardRemaining;
+}
+
 function buildShiftArchiveRecord(targetState, customDateLabel) {
+  recalculateShiftTotalsFromLedger(targetState);
+  const breakdown = getCashAndCardBreakdown(targetState);
+
   const cafeGrossSales = round2(targetState.completedSalesTotal);
-  const cafeExpenses = round2(
-    (targetState.expenses || [])
-      .filter((e) => e.type !== "pencere")
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
-  );
+  const cafeExpenses = breakdown.cafeExpenses;
   const cafeNetCash = round2(cafeGrossSales - cafeExpenses);
 
   const winGrossSales = round2(targetState.windowSalesTotal);
-  const winExpenses = round2(
-    (targetState.expenses || [])
-      .filter((e) => e.type === "pencere")
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
-  );
+  const winExpenses = breakdown.winExpenses;
   const winNetCash = round2(winGrossSales - winExpenses);
 
   const grandNetCash = round2(cafeNetCash + winNetCash);
   const totalGross = round2(cafeGrossSales + winGrossSales);
-  const totalExpenses = round2(cafeExpenses + winExpenses);
+  const totalExpenses = breakdown.totalExpenses;
 
   return {
     id: `shift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1780,11 +3212,14 @@ function buildShiftArchiveRecord(targetState, customDateLabel) {
     grossSales: totalGross,
     totalExpenses: totalExpenses,
     netCash: grandNetCash,
+    cashOnHand: breakdown.cashOnHand,
+    cardRemaining: breakdown.cardRemaining,
     soldItemsSummary: { ...(targetState.soldItemsSummary || {}) },
     soldCustomItems: [...(targetState.soldCustomItems || [])],
     windowSoldSummary: { ...(targetState.windowSoldSummary || {}) },
     expenses: [...(targetState.expenses || [])],
-    closedBills: [...(targetState.closedBills || [])]
+    closedBills: [...(targetState.closedBills || [])],
+    atmTransfers: [...(targetState.atmTransfers || [])]
   };
 }
 
@@ -1817,7 +3252,7 @@ function executeEndDayAndReset() {
   saveArchive(archive);
 
   state = createDefaultState();
-  saveState();
+  saveState({ resetShift: true });
 
   closeConfirmResetModal();
   closeReportModal();
@@ -1825,7 +3260,7 @@ function executeEndDayAndReset() {
   showToast("Növbə bağlandı! Hesabat arxivə göndərildi və kassa sıfırlandı.");
 }
 
-// XÜSUSİ ARXİV MODALI (Detallı Tarixçə və '✕' Silmə İmkanı — Yalnız Admin)
+// XÜSUSİ ARXİV MODALI (Detallı Tarixçə, '✏️ Redaktə' və '✕' Silmə İmkanı — Yalnız Admin)
 function openArchiveModal() {
   if (currentUserRole !== "admin") return;
   renderArchiveModal();
@@ -1847,6 +3282,18 @@ function deleteArchiveDayById(archiveId) {
 
   const updated = archive.filter((item) => item.id !== archiveId);
   saveArchive(updated);
+  renderArchiveModal();
+}
+
+function deleteArchiveBillById(archiveDayId, billId) {
+  if (currentUserRole !== "admin") return;
+  const archive = loadArchive();
+  const dayEntry = archive.find((d) => d.id === archiveDayId);
+  if (!dayEntry || !Array.isArray(dayEntry.closedBills)) return;
+
+  dayEntry.closedBills = dayEntry.closedBills.filter((b) => b.id !== billId);
+  recalculateArchiveEntryTotals(dayEntry);
+  saveArchive(archive);
   renderArchiveModal();
 }
 
@@ -1872,6 +3319,8 @@ function renderArchiveModal() {
     const totalGross = round2(entry.grossSales != null ? entry.grossSales : (cafeGross + winGross));
     const totalExp = round2(entry.totalExpenses != null ? entry.totalExpenses : (cafeExp + winExp));
     const grandNet = round2(entry.netCash != null ? entry.netCash : (cafeNet + winNet));
+    const cashOnHand = entry.cashOnHand != null ? round2(entry.cashOnHand) : grandNet;
+    const cardRemaining = entry.cardRemaining != null ? round2(entry.cardRemaining) : 0;
 
     // Satılan Kafe məhsulları siyahısı
     const soldCafeRows = [];
@@ -1939,12 +3388,18 @@ function renderArchiveModal() {
       <div class="archive-day-top">
         <div class="archive-day-info">
           <span class="archive-day-date">${entry.fullDate || entry.date}</span>
-          <span class="archive-day-sub">Satış: ${formatMoney(totalGross)} &nbsp;|&nbsp; Xərc: ${formatNegativeMoney(totalExp)}</span>
+          <span class="archive-day-sub">💵 Nağd: ${formatMoney(cashOnHand)} &nbsp;|&nbsp; 💳 Kart: ${formatMoney(cardRemaining)} &nbsp;|&nbsp; Xərc: ${formatNegativeMoney(totalExp)}</span>
         </div>
         <div class="archive-day-right">
           <strong class="archive-day-net">${formatMoney(grandNet)}</strong>
           <button type="button" class="delete-record-btn" title="Bu günü arxivdən sil">✕</button>
         </div>
+      </div>
+
+      <div class="archive-day-actions-bar">
+        <button type="button" class="export-csv-btn-mini" title="Bu günün hesabatını Excel/CSV formatında yüklə">
+          📥 Excel / Hesabatı Yüklə (CSV)
+        </button>
       </div>
 
       <div class="archive-day-details">
@@ -1962,6 +3417,16 @@ function renderArchiveModal() {
         </div>
 
         <div class="archive-detail-block">
+          <h5 class="mini-title">Həmin Günün Çekləri (✏️ Redaktə / ✕ Sil)</h5>
+          <div class="mini-list archive-bills-list"></div>
+        </div>
+
+        <div class="archive-detail-block">
+          <h5 class="mini-title">📊 Masalar Üzrə Hesabat (15 Masa & Pəncərə)</h5>
+          <div class="per-table-stats-grid archive-per-table-grid"></div>
+        </div>
+
+        <div class="archive-detail-block">
           <h5 class="mini-title">Ofisiantlar Üzrə Dövriyyə</h5>
           <div class="mini-list">${waiterRowsHtml || `<div class="mini-empty">Məlumat yoxdur</div>`}</div>
         </div>
@@ -1976,17 +3441,107 @@ function renderArchiveModal() {
           <div class="mini-list">${soldWinRows.length > 0 ? soldWinRows.join("") : `<div class="mini-empty">Pəncərə satışı olmayıb</div>`}</div>
         </div>
 
-        ${expRowsHtml ? `
-          <div class="archive-detail-block">
-            <h5 class="mini-title">Həmin Günün Xərcləri</h5>
-            <div class="mini-list">${expRowsHtml}</div>
+        <div class="archive-detail-block">
+          <div class="archive-expenses-header">
+            <h5 class="mini-title" style="margin:0;">Həmin Günün Xərcləri</h5>
+            <button type="button" class="btn-add-archive-expense">➕ Bu Günə Xərc Əlavə Et</button>
           </div>
-        ` : ""}
+          <div class="mini-list archive-expenses-list"></div>
+        </div>
       </div>
     `;
 
+    const exportCsvBtn = card.querySelector(".export-csv-btn-mini");
+    if (exportCsvBtn) {
+      exportCsvBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        downloadShiftCsv(entry, `BabaBala_Arxiv_${entry.shiftDateKey || "gun"}`);
+      });
+    }
+
+    const archiveGridEl = card.querySelector(".archive-per-table-grid");
+    if (archiveGridEl) {
+      renderPerTableStatsGrid(archiveGridEl, entry.closedBills || []);
+    }
+
+    const addArchiveExpBtn = card.querySelector(".btn-add-archive-expense");
+    if (addArchiveExpBtn) {
+      addArchiveExpBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openExpenseEditModal({ isNew: true, archiveDayId: entry.id });
+      });
+    }
+
+    const archiveExpListEl = card.querySelector(".archive-expenses-list");
+    const dayExpenses = (entry.expenses || []).filter((e) => !e.deleted);
+    if (archiveExpListEl) {
+      if (dayExpenses.length === 0) {
+        archiveExpListEl.innerHTML = `<div class="mini-empty">Bu gün xərc qeydə alınmayıb.</div>`;
+      } else {
+        dayExpenses.forEach((exp) => {
+          const row = document.createElement("div");
+          row.className = "mini-row";
+          row.innerHTML = `
+            <span><span class="expense-badge ${exp.type === "pencere" ? "pencere" : "kafe"}">${exp.type === "pencere" ? "Pəncərə" : "Kafe"}</span> ${exp.title}</span>
+            <div class="bill-right-actions">
+              <strong style="color:#dc2626">${formatNegativeMoney(exp.amount)}</strong>
+              <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
+              <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
+            </div>
+          `;
+          row.querySelector(".edit-record-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: entry.id });
+          });
+          row.querySelector(".delete-record-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteArchiveExpenseById(entry.id, exp.id);
+          });
+          archiveExpListEl.appendChild(row);
+        });
+      }
+    }
+
+    const archiveBillsListEl = card.querySelector(".archive-bills-list");
+    const dayBills = Array.isArray(entry.closedBills) ? entry.closedBills : [];
+    if (archiveBillsListEl) {
+      if (dayBills.length === 0) {
+        archiveBillsListEl.innerHTML = `<div class="mini-empty">Çek qeydi yoxdur</div>`;
+      } else {
+        dayBills.forEach((b) => {
+          const itemsStr = (b.items || []).map((it) => `${it.name} × ${it.qty}`).join(", ");
+          const payTagClass = b.paymentMethod === "card" ? "tag-card" : "tag-cash";
+          const payTagText = b.paymentMethod === "card" ? "💳 Kart" : "💵 Nağd";
+          const billAmt = round2(b.totalAmount != null ? b.totalAmount : b.total);
+
+          const bRow = document.createElement("div");
+          bRow.className = "report-bill-sub-item";
+          bRow.innerHTML = `
+            <div class="report-bill-sub-left">
+              <span><strong>${b.tableName || "Masa"}</strong> (${b.time || ""}) <span class="pay-method-tag ${payTagClass}">${payTagText}</span></span>
+              ${itemsStr ? `<span class="report-bill-sub-items">${itemsStr}</span>` : ""}
+            </div>
+            <div class="bill-right-actions">
+              <strong>${formatMoney(billAmt)}</strong>
+              <button type="button" class="edit-record-btn" title="Bu çeki redaktə et">✏️ Redaktə</button>
+              <button type="button" class="delete-record-btn" title="Bu çeki sil">✕</button>
+            </div>
+          `;
+          bRow.querySelector(".edit-record-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            openEditBillModal(b.id, entry.id);
+          });
+          bRow.querySelector(".delete-record-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteArchiveBillById(entry.id, b.id);
+          });
+          archiveBillsListEl.appendChild(bRow);
+        });
+      }
+    }
+
     const topBar = card.querySelector(".archive-day-top");
-    const deleteBtn = card.querySelector(".delete-record-btn");
+    const deleteBtn = card.querySelector(".archive-day-top .delete-record-btn");
 
     topBar.addEventListener("click", (e) => {
       if (e.target === deleteBtn || deleteBtn.contains(e.target)) return;
@@ -2263,15 +3818,21 @@ function initBrandLogoTripleTap() {
 }
 
 // ============================================================================
-// 8. KRİTİK YAZMA QORUMASI (isInitialSyncDone) VƏ FIREBASE CANLI SİNXRONİZASİYA
-//    Canlı növbə: "bababala_data/live_shift"
-//    Ayrı Arxiv:  "bababala_data/shift_archive"
+// 8. KRİTİK MƏLUMAT BÜTÖVLÜYÜ (DATA INTEGRITY) VƏ PARÇALI (GRANULAR / APPEND-ONLY) SİNXRONİZASİYA
+//    - Bütün state-i tək bir sənədin üstünə full overwrite etmək QƏTİ QADAĞANDIR!
+//    - Masalar ayrı-ayrılıqda (tables.[tableId]) sinxronlaşır.
+//    - Bağlanmış çeklər (transactions), xərclər (expenses) və ATM çıxarışları (atmTransfers)
+//      unikal ID ilə append/merge olunur. Heç bir köhnə keş kassanı sıfırlaya bilməz!
 // ============================================================================
-let firestoreDocRef = null;
+let firestoreTablesDocRef = null;
+let firestoreTxDocRef = null;
 let firestoreArchiveDocRef = null;
-let unsubscribeFirestore = null;
+let unsubscribeTablesFirestore = null;
+let unsubscribeTxFirestore = null;
 let unsubscribeArchiveFirestore = null;
 
+let isInitialTablesSyncDone = false;
+let isInitialTxSyncDone = false;
 let isInitialSyncDone = false;
 let isInitialArchiveSyncDone = false;
 let isApplyingRemoteSync = false;
@@ -2279,7 +3840,7 @@ let lastPushedSyncId = null;
 let lastPushedArchiveSyncId = null;
 
 const localBroadcast = typeof BroadcastChannel !== "undefined"
-  ? new BroadcastChannel("bababala_pos_live_channel")
+  ? new BroadcastChannel("bababala_pos_live_channel_v2")
   : null;
 
 if (localBroadcast) {
@@ -2290,8 +3851,15 @@ if (localBroadcast) {
       if (archiveModal && archiveModal.classList.contains("open")) {
         renderArchiveModal();
       }
-    } else {
-      applyIncomingRemoteSync(event.data);
+    } else if (event.data.state) {
+      isApplyingRemoteSync = true;
+      try {
+        state = normalizeStateObject(event.data.state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        refreshAllActiveViews();
+      } finally {
+        isApplyingRemoteSync = false;
+      }
     }
   };
 }
@@ -2345,54 +3913,273 @@ function refreshAllActiveViews() {
   }
 }
 
-function applyIncomingRemoteSync(payload) {
-  if (!payload || typeof payload !== "object") return;
-  if (payload.syncId && payload.syncId === lastPushedSyncId) return;
+function markInitialSyncIfReady() {
+  if (isInitialTablesSyncDone && isInitialTxSyncDone) {
+    isInitialSyncDone = true;
+  }
+}
+
+// Bazadan gələn Masalar sənədini lokal state-lə birləşdir (digər cihazın masalarını əzmədən)
+function applyIncomingTablesSnapshot(data) {
+  if (!data || typeof data !== "object") return;
+  if (data.syncId && data.syncId === lastPushedSyncId) return;
 
   isApplyingRemoteSync = true;
   try {
-    if (payload.state) {
-      state = normalizeStateObject(payload.state);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const incomingTablesMap = (data.tables && typeof data.tables === "object") ? data.tables : {};
+    state.tables = INITIAL_TABLES.map((initTable) => {
+      const remoteT = incomingTablesMap[initTable.id];
+      const localT = state.tables.find((t) => t.id === initTable.id);
+      const chosen = remoteT || localT || initTable;
+      return {
+        id: initTable.id,
+        name: initTable.name,
+        group: initTable.group,
+        orders: sanitizeOrdersMap(chosen.orders),
+        customOrders: Array.isArray(chosen.customOrders) ? chosen.customOrders : [],
+        lastWaiter: chosen.lastWaiter || null,
+        updatedAt: Number(chosen.updatedAt) || 0
+      };
+    });
+
+    if (data.windowCart && typeof data.windowCart === "object") {
+      state.windowCart = data.windowCart;
     }
+
+    saveStateLocalOnly();
     refreshAllActiveViews();
   } finally {
     isApplyingRemoteSync = false;
   }
 }
 
-function pushLiveSync() {
-  // KRİTİK QORUMA: Firebase-dən ilk canlı snapshot gələnə qədər heç nə yazma!
+// Bazadan gələn Tranzaksiya / Xərc / ATM sənədini lokal state-lə birləşdir (Source of Truth)
+function applyIncomingTransactionsSnapshot(data) {
+  if (!data || typeof data !== "object") return;
+  if (data.syncId && data.syncId === lastPushedSyncId) return;
+
+  isApplyingRemoteSync = true;
+  try {
+    if (data.shiftDateKey) state.shiftDateKey = data.shiftDateKey;
+    if (data.shiftFullDate) state.shiftFullDate = data.shiftFullDate;
+
+    // 1. Tranzaksiyalar (closedBills) — Silinməmiş bütün qeydləri zamana görə sırala
+    const txMap = (data.transactions && typeof data.transactions === "object") ? data.transactions : {};
+    const txList = Object.values(txMap)
+      .filter((tx) => tx && !tx.deleted)
+      .map(normalizeTransactionRecord)
+      .filter(Boolean)
+      .sort((a, b) => (Number(a.updatedAt) || 0) - (Number(b.updatedAt) || 0));
+    state.closedBills = txList;
+
+    // 2. Xərclər (expenses)
+    const expMap = (data.expenses && typeof data.expenses === "object") ? data.expenses : {};
+    const expList = Object.values(expMap)
+      .filter((e) => e && !e.deleted && Number(e.amount) > 0)
+      .map((e) => ({
+        id: e.id,
+        title: e.title,
+        amount: round2(e.amount),
+        type: e.type === "pencere" ? "pencere" : "kafe",
+        addedBy: e.addedBy || "waiter1",
+        time: e.time || "00:00",
+        updatedAt: Number(e.updatedAt) || 0
+      }))
+      .sort((a, b) => (Number(a.updatedAt) || 0) - (Number(b.updatedAt) || 0));
+    state.expenses = expList;
+
+    // 3. ATM Çıxarışları (atmTransfers)
+    const atmMap = (data.atmTransfers && typeof data.atmTransfers === "object") ? data.atmTransfers : {};
+    const atmList = Object.values(atmMap)
+      .filter((a) => a && !a.deleted && Number(a.amount) > 0)
+      .map((a) => ({
+        id: a.id,
+        amount: round2(a.amount),
+        time: a.time || "00:00",
+        date: a.date || getBusinessDateKey(),
+        note: a.note || "ATM Nağdlaşdırma",
+        addedBy: a.addedBy || "admin",
+        updatedAt: Number(a.updatedAt) || 0
+      }))
+      .sort((a, b) => (Number(a.updatedAt) || 0) - (Number(b.updatedAt) || 0));
+    state.atmTransfers = atmList;
+
+    saveStateLocalOnly();
+    refreshAllActiveViews();
+  } finally {
+    isApplyingRemoteSync = false;
+  }
+}
+
+// PARÇALI VƏ APPEND-ONLY SİNXRONİZASİYA FUNKSİYASI (Full Overwrite Qadağandır!)
+function pushGranularLiveSync(options = {}) {
+  // Eyni браузерdəki digər tabları dərhal məlumatlandır
+  if (localBroadcast && !isApplyingRemoteSync) {
+    try {
+      localBroadcast.postMessage({
+        clientId: CLIENT_ID,
+        state: JSON.parse(JSON.stringify(state))
+      });
+    } catch (err) {
+      // Ignore broadcast error
+    }
+  }
+
+  // KRİTİK QORUMA: Firebase-dən ilk canlı snapshotlar gələnə qədər bazaya heç nə yazma!
   if (!isInitialSyncDone || isApplyingRemoteSync) return;
 
   const nowTs = Date.now();
   const syncId = `${CLIENT_ID}_${nowTs}_${Math.random().toString(36).slice(2, 6)}`;
   lastPushedSyncId = syncId;
 
-  const payload = {
-    syncId,
-    clientId: CLIENT_ID,
-    updatedAt: nowTs,
-    state: JSON.parse(JSON.stringify(state))
-  };
+  // Əgər "Günü Bitir və Sıfırla" icra olunubsa (yalnız Admin tərəfindən təsdiqlə):
+  if (options.resetShift) {
+    const emptyTablesMap = {};
+    state.tables.forEach((t) => {
+      emptyTablesMap[t.id] = {
+        id: t.id,
+        name: t.name,
+        group: t.group,
+        orders: {},
+        customOrders: [],
+        lastWaiter: null,
+        updatedAt: nowTs
+      };
+    });
 
-  if (localBroadcast) {
-    try {
-      localBroadcast.postMessage(payload);
-    } catch (err) {
-      // Ignore broadcast error
+    if (firestoreTablesDocRef) {
+      firestoreTablesDocRef.set({
+        syncId,
+        clientId: CLIENT_ID,
+        updatedAt: nowTs,
+        windowCart: {},
+        tables: emptyTablesMap
+      }).catch((err) => console.error("Firestore tables reset xətası:", err));
     }
+
+    if (firestoreTxDocRef) {
+      firestoreTxDocRef.set({
+        syncId,
+        clientId: CLIENT_ID,
+        updatedAt: nowTs,
+        shiftDateKey: state.shiftDateKey,
+        shiftFullDate: state.shiftFullDate,
+        transactions: {},
+        expenses: {},
+        atmTransfers: {}
+      }).catch((err) => console.error("Firestore transactions reset xətası:", err));
+    }
+    return;
   }
 
-  if (firestoreDocRef) {
-    firestoreDocRef
-      .set(payload)
-      .then(() => {
-        updateSyncStatusUI("sync-live", "🟢 Canlı");
-      })
-      .catch((err) => {
-        console.error("Firestore live_shift yazma xətası:", err);
+  // 1. Yalnız dəyişdirilmiş masaları və ya pəncərə səbətini { merge: true } ilə göndər
+  const changedTableIds = Array.isArray(options.changedTableIds) ? options.changedTableIds : [];
+  if ((changedTableIds.length > 0 || options.syncWindowCart) && firestoreTablesDocRef) {
+    const tablesPatch = {
+      syncId,
+      clientId: CLIENT_ID,
+      updatedAt: nowTs
+    };
+
+    if (options.syncWindowCart) {
+      tablesPatch.windowCart = state.windowCart || {};
+    }
+
+    if (changedTableIds.length > 0) {
+      tablesPatch.tables = {};
+      changedTableIds.forEach((tId) => {
+        const tObj = state.tables.find((t) => t.id === tId);
+        if (tObj) {
+          tablesPatch.tables[tId] = {
+            id: tObj.id,
+            name: tObj.name,
+            group: tObj.group,
+            orders: sanitizeOrdersMap(tObj.orders),
+            customOrders: Array.isArray(tObj.customOrders) ? tObj.customOrders : [],
+            lastWaiter: tObj.lastWaiter || null,
+            updatedAt: nowTs
+          };
+        }
       });
+    }
+
+    firestoreTablesDocRef
+      .set(tablesPatch, { merge: true })
+      .then(() => updateSyncStatusUI("sync-live", "🟢 Canlı"))
+      .catch((err) => console.error("Firestore masa sinxronizasiya xətası:", err));
+  }
+
+  // 2. Yeni Tranzaksiyaları (Append), Redaktələri, Xərcləri və ATM qeydlərini { merge: true } ilə göndər
+  const newTxs = Array.isArray(options.newTransactions) ? options.newTransactions : [];
+  const deletedTxIds = Array.isArray(options.deletedTransactionIds) ? options.deletedTransactionIds : [];
+  const newExps = Array.isArray(options.newExpenses) ? options.newExpenses : [];
+  const deletedExpIds = Array.isArray(options.deletedExpenseIds) ? options.deletedExpenseIds : [];
+  const newAtms = Array.isArray(options.newAtmTransfers) ? options.newAtmTransfers : [];
+  const deletedAtmIds = Array.isArray(options.deletedAtmIds) ? options.deletedAtmIds : [];
+
+  const hasLedgerUpdates =
+    newTxs.length > 0 ||
+    deletedTxIds.length > 0 ||
+    newExps.length > 0 ||
+    deletedExpIds.length > 0 ||
+    newAtms.length > 0 ||
+    deletedAtmIds.length > 0;
+
+  if (hasLedgerUpdates && firestoreTxDocRef) {
+    const txPatch = {
+      syncId,
+      clientId: CLIENT_ID,
+      updatedAt: nowTs,
+      shiftDateKey: state.shiftDateKey,
+      shiftFullDate: state.shiftFullDate
+    };
+
+    if (newTxs.length > 0 || deletedTxIds.length > 0) {
+      txPatch.transactions = {};
+      newTxs.forEach((tx) => {
+        if (tx && tx.id) {
+          txPatch.transactions[tx.id] = { ...tx, deleted: false, updatedAt: nowTs };
+        }
+      });
+      deletedTxIds.forEach((id) => {
+        if (id) {
+          txPatch.transactions[id] = { id, deleted: true, updatedAt: nowTs };
+        }
+      });
+    }
+
+    if (newExps.length > 0 || deletedExpIds.length > 0) {
+      txPatch.expenses = {};
+      newExps.forEach((exp) => {
+        if (exp && exp.id) {
+          txPatch.expenses[exp.id] = { ...exp, deleted: false, updatedAt: nowTs };
+        }
+      });
+      deletedExpIds.forEach((id) => {
+        if (id) {
+          txPatch.expenses[id] = { id, deleted: true, updatedAt: nowTs };
+        }
+      });
+    }
+
+    if (newAtms.length > 0 || deletedAtmIds.length > 0) {
+      txPatch.atmTransfers = {};
+      newAtms.forEach((atm) => {
+        if (atm && atm.id) {
+          txPatch.atmTransfers[atm.id] = { ...atm, deleted: false, updatedAt: nowTs };
+        }
+      });
+      deletedAtmIds.forEach((id) => {
+        if (id) {
+          txPatch.atmTransfers[id] = { id, deleted: true, updatedAt: nowTs };
+        }
+      });
+    }
+
+    firestoreTxDocRef
+      .set(txPatch, { merge: true })
+      .then(() => updateSyncStatusUI("sync-live", "🟢 Canlı"))
+      .catch((err) => console.error("Firestore tranzaksiya logu yazma xətası:", err));
   }
 }
 
@@ -2450,43 +4237,73 @@ function initFirebaseSync() {
       }
     });
 
-    firestoreDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
+    firestoreTablesDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_TABLES_DOC_ID);
+    firestoreTxDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_TX_DOC_ID);
     firestoreArchiveDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_ARCHIVE_DOC_ID);
     updateSyncStatusUI("sync-live", "🟢 Canlı");
 
-    if (unsubscribeFirestore) unsubscribeFirestore();
+    if (unsubscribeTablesFirestore) unsubscribeTablesFirestore();
+    if (unsubscribeTxFirestore) unsubscribeTxFirestore();
     if (unsubscribeArchiveFirestore) unsubscribeArchiveFirestore();
 
-    // 1. Canlı Növbə Dinləyicisi ("bababala_data/live_shift")
-    unsubscribeFirestore = firestoreDocRef.onSnapshot(
+    // 1. Parçalı Masalar Dinləyicisi (Hər masa müstəqil yenilənir)
+    unsubscribeTablesFirestore = firestoreTablesDocRef.onSnapshot(
       (docSnap) => {
         updateSyncStatusUI("sync-live", "🟢 Canlı");
-
         if (docSnap.exists) {
           const data = docSnap.data();
-          // Eyni cihazın öz göndərdiyi əks-səda (echo) paketini təkrar öz üzərinə yazma
-          const isOwnEcho = isInitialSyncDone && data && (data.clientId === CLIENT_ID || data.syncId === lastPushedSyncId);
+          const isOwnEcho = isInitialTablesSyncDone && data && (data.clientId === CLIENT_ID || data.syncId === lastPushedSyncId);
           if (data && !isOwnEcho) {
-            applyIncomingRemoteSync(data);
+            applyIncomingTablesSnapshot(data);
           }
-          // Köhnə live_shift daxilində arxiv qalmışdısa və yeni shift_archive hələ boşdursa, onu miqrasiya et
-          if (data && Array.isArray(data.archive) && data.archive.length > 0 && loadArchive().length === 0) {
-            localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(data.archive));
-          }
-          isInitialSyncDone = true;
+          isInitialTablesSyncDone = true;
+          markInitialSyncIfReady();
         } else if (!docSnap.metadata.fromCache) {
-          // Bazada sənəd hələ yoxdursa, ilkin qoruma bayrağını açıb cari vəziyyəti bazaya yarat
-          isInitialSyncDone = true;
-          pushLiveSync();
+          isInitialTablesSyncDone = true;
+          markInitialSyncIfReady();
+          pushGranularLiveSync({
+            changedTableIds: state.tables.map((t) => t.id),
+            syncWindowCart: true
+          });
         }
       },
       (err) => {
-        console.error("Firestore live_shift onSnapshot xətası:", err);
+        console.error("Firestore tables onSnapshot xətası:", err);
         updateSyncStatusUI("sync-error", "🔴 Xəta");
       }
     );
 
-    // 2. Ayrı Arxiv Dinləyicisi ("bababala_data/shift_archive")
+    // 2. Sarsılmaz Tranzaksiya Logu Dinləyicisi (Source of Truth — Kassa və Satışlar)
+    unsubscribeTxFirestore = firestoreTxDocRef.onSnapshot(
+      (docSnap) => {
+        updateSyncStatusUI("sync-live", "🟢 Canlı");
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          const isOwnEcho = isInitialTxSyncDone && data && (data.clientId === CLIENT_ID || data.syncId === lastPushedSyncId);
+          if (data && !isOwnEcho) {
+            applyIncomingTransactionsSnapshot(data);
+          }
+          isInitialTxSyncDone = true;
+          markInitialSyncIfReady();
+        } else if (!docSnap.metadata.fromCache) {
+          isInitialTxSyncDone = true;
+          markInitialSyncIfReady();
+          if (state.closedBills.length > 0 || state.expenses.length > 0 || state.atmTransfers.length > 0) {
+            pushGranularLiveSync({
+              newTransactions: state.closedBills,
+              newExpenses: state.expenses,
+              newAtmTransfers: state.atmTransfers
+            });
+          }
+        }
+      },
+      (err) => {
+        console.error("Firestore transactions onSnapshot xətası:", err);
+        updateSyncStatusUI("sync-error", "🔴 Xəta");
+      }
+    );
+
+    // 3. Ayrı Arxiv Dinləyicisi
     unsubscribeArchiveFirestore = firestoreArchiveDocRef.onSnapshot(
       (docSnap) => {
         if (docSnap.exists) {
@@ -2521,7 +4338,7 @@ window.addEventListener("online", () => {
   updateSyncStatusUI("sync-live", "🟢 Canlı");
 });
 
-// Hər 60 saniyədən bir avto-bağlanma vaxtını (05:00) yoxla
+// Hər 60 saniyədən bir tarix açarını yoxla
 setInterval(checkAndExecuteAutoEndDay, 60000);
 
 // ============================================================================
@@ -2530,11 +4347,130 @@ setInterval(checkAndExecuteAutoEndDay, 60000);
 modeCafeBtn.addEventListener("click", () => setAppMode("kafe"));
 modeWindowBtn.addEventListener("click", () => setAppMode("pencere"));
 
+if (windowPayCashBtn) {
+  windowPayCashBtn.addEventListener("click", () => setWindowPaymentMethod("cash"));
+}
+if (windowPayCardBtn) {
+  windowPayCardBtn.addEventListener("click", () => setWindowPaymentMethod("card"));
+}
 windowClearCartBtn.addEventListener("click", clearWindowCart);
 windowCheckoutBtn.addEventListener("click", checkoutWindowCart);
 
 backToMainBtn.addEventListener("click", closeTableScreen);
+if (saveOrderBtn) {
+  saveOrderBtn.addEventListener("click", confirmAndSaveActiveTableOrder);
+}
 closeBillBtn.addEventListener("click", closeActiveTableBill);
+
+// Menyu Sürətli Axtarış Xanası Dinləyiciləri
+if (menuSearchInput) {
+  menuSearchInput.addEventListener("input", () => {
+    if (clearMenuSearchBtn) {
+      clearMenuSearchBtn.style.display = menuSearchInput.value ? "inline-flex" : "none";
+    }
+    const table = state.tables.find((t) => t.id === activeTableId);
+    if (table) renderQuickMenu(table);
+  });
+}
+if (clearMenuSearchBtn) {
+  clearMenuSearchBtn.addEventListener("click", () => {
+    if (menuSearchInput) {
+      menuSearchInput.value = "";
+      clearMenuSearchBtn.style.display = "none";
+      const table = state.tables.find((t) => t.id === activeTableId);
+      if (table) renderQuickMenu(table);
+      menuSearchInput.focus();
+    }
+  });
+}
+
+// Ödəniş Metodu (💵 Nağd / 💳 Kart) Modalı Dinləyiciləri
+if (modalPayCashBtn) {
+  modalPayCashBtn.addEventListener("click", () => setTablePaymentMethod("cash"));
+}
+if (modalPayCardBtn) {
+  modalPayCardBtn.addEventListener("click", () => setTablePaymentMethod("card"));
+}
+if (cancelPaymentMethodBtn) {
+  cancelPaymentMethodBtn.addEventListener("click", closePaymentMethodModal);
+}
+if (confirmCloseBillWithMethodBtn) {
+  confirmCloseBillWithMethodBtn.addEventListener("click", confirmCloseActiveTableBill);
+}
+if (paymentMethodModal) {
+  paymentMethodModal.addEventListener("click", (e) => {
+    if (e.target === paymentMethodModal) closePaymentMethodModal();
+  });
+}
+
+// Masanı Köçür ("🔄 Masanı Köçür") Modalı Dinləyiciləri
+if (openTransferTableBtn) {
+  openTransferTableBtn.addEventListener("click", openTransferTableModal);
+}
+if (closeTransferModalBtn) {
+  closeTransferModalBtn.addEventListener("click", closeTransferTableModal);
+}
+if (cancelMergeTransferBtn) {
+  cancelMergeTransferBtn.addEventListener("click", () => {
+    pendingMergeTargetTableId = null;
+    if (transferMergeConfirmBox) transferMergeConfirmBox.style.display = "none";
+  });
+}
+if (confirmMergeTransferBtn) {
+  confirmMergeTransferBtn.addEventListener("click", () => {
+    if (activeTableId && pendingMergeTargetTableId) {
+      executeTableTransfer(activeTableId, pendingMergeTargetTableId);
+    }
+  });
+}
+if (transferTableModal) {
+  transferTableModal.addEventListener("click", (e) => {
+    if (e.target === transferTableModal) closeTransferTableModal();
+  });
+}
+
+// ATM Çıxarışı ("🏧 Kartdan Nağda Çevir") Modalı Dinləyiciləri
+if (openAtmTransferBtn) {
+  openAtmTransferBtn.addEventListener("click", openAtmTransferModal);
+}
+if (closeAtmModalBtn) {
+  closeAtmModalBtn.addEventListener("click", closeAtmTransferModal);
+}
+if (atmTransferModal) {
+  atmTransferModal.addEventListener("click", (e) => {
+    if (e.target === atmTransferModal) closeAtmTransferModal();
+  });
+}
+
+// Bağlanmış Çekin Redaktəsi ("✏️ Redaktə") Modalı Dinləyiciləri
+if (closeEditBillModalBtn) {
+  closeEditBillModalBtn.addEventListener("click", closeEditBillModal);
+}
+if (editBillCashBtn) {
+  editBillCashBtn.addEventListener("click", () => {
+    if (!editingBillContext) return;
+    editingBillContext.draftPaymentMethod = "cash";
+    renderEditBillModalContent();
+  });
+}
+if (editBillCardBtn) {
+  editBillCardBtn.addEventListener("click", () => {
+    if (!editingBillContext) return;
+    editingBillContext.draftPaymentMethod = "card";
+    renderEditBillModalContent();
+  });
+}
+if (editBillAddItemBtn) {
+  editBillAddItemBtn.addEventListener("click", addMenuItemToEditedBill);
+}
+if (saveEditedBillBtn) {
+  saveEditedBillBtn.addEventListener("click", saveEditedBillChanges);
+}
+if (editBillModal) {
+  editBillModal.addEventListener("click", (e) => {
+    if (e.target === editBillModal) closeEditBillModal();
+  });
+}
 
 openExpenseBtn.addEventListener("click", openExpenseModal);
 closeExpenseModalBtn.addEventListener("click", closeExpenseModal);
@@ -2552,6 +4488,25 @@ closeReportModalBtn.addEventListener("click", closeReportModal);
 reportModal.addEventListener("click", (e) => {
   if (e.target === reportModal) closeReportModal();
 });
+
+if (exportReportCsvBtn) {
+  exportReportCsvBtn.addEventListener("click", () => {
+    downloadShiftCsv(state, "BabaBala_Gunluk_Hesabat");
+  });
+}
+
+// Xərc Redaktə Modalı Dinləyiciləri
+if (expenseEditForm) {
+  expenseEditForm.addEventListener("submit", handleExpenseEditFormSubmit);
+}
+if (closeExpenseEditModalBtn) {
+  closeExpenseEditModalBtn.addEventListener("click", closeExpenseEditModal);
+}
+if (expenseEditModal) {
+  expenseEditModal.addEventListener("click", (e) => {
+    if (e.target === expenseEditModal) closeExpenseEditModal();
+  });
+}
 
 if (openArchiveHeaderBtn) {
   openArchiveHeaderBtn.addEventListener("click", openArchiveModal);
