@@ -1,0 +1,2237 @@
+:root {
+  --bg-app: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-header: #0f172a;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+
+  /* Boş masa (Yaşıl çalarlı) */
+  --empty-bg: #ecfdf5;
+  --empty-border: #34d399;
+  --empty-text: #065f46;
+  --empty-badge-bg: #10b981;
+
+  /* Dolu masa (Açıq rəngli aktiv kart) */
+  --busy-bg: #fffbeb;
+  --busy-border: #f59e0b;
+  --busy-text: #92400e;
+  --busy-badge-bg: #f59e0b;
+
+  /* Düymə rəngləri */
+  --primary: #16a34a;
+  --primary-active: #15803d;
+  --expense-color: #dc2626;
+  --expense-bg: #fef2f2;
+  --report-color: #1e293b;
+  --accent-blue: #2563eb;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  touch-action: manipulation;
+}
+
+button, input {
+  font-family: inherit;
+  touch-action: manipulation;
+}
+
+input {
+  user-select: text;
+}
+
+/* EKRAN İDARƏETMƏSİ */
+.screen {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: var(--bg-app);
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* EKRAN 1: YUXARI BAŞLIQ */
+.app-header {
+  background: var(--bg-header);
+  color: #ffffff;
+  padding: calc(var(--safe-top) + 12px) 16px 14px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.18);
+  flex-shrink: 0;
+}
+
+.header-utility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-title {
+  font-size: 1.48rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.current-date {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Canlı Sinxronizasiya Göstəricisi */
+.sync-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fbbf24;
+}
+
+.sync-status-pill.sync-live {
+  background: rgba(22, 163, 74, 0.22);
+  border-color: rgba(74, 222, 128, 0.45);
+  color: #86efac;
+}
+
+.sync-status-pill.sync-live .sync-dot {
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+}
+
+.sync-status-pill.sync-error {
+  background: rgba(220, 38, 38, 0.22);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+.sync-status-pill.sync-error .sync-dot {
+  background: #f87171;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.header-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 1.08rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.12s ease;
+}
+
+.header-icon-btn:active {
+  transform: scale(0.93);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.role-badge-btn {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.role-badge-btn:active {
+  transform: scale(0.95);
+}
+
+.role-badge-btn.is-admin {
+  background: rgba(234, 179, 8, 0.2);
+  border-color: rgba(250, 204, 21, 0.45);
+  color: #fde047;
+}
+
+.header-sales-row {
+  margin-top: 10px;
+}
+
+.daily-sales-box {
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.daily-sales-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sales-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.sales-amount {
+  display: block;
+  font-size: 1.38rem;
+  font-weight: 900;
+  color: #4ade80;
+  line-height: 1.15;
+}
+
+.sales-sub {
+  display: block;
+  font-size: 0.74rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* Rejim Keçid Zolağı (Kafe vs Pəncərə) */
+.mode-switch-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px;
+  border-radius: 14px;
+}
+
+.mode-btn {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.92rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.mode-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mode-btn:active {
+  transform: scale(0.97);
+}
+
+/* ƏSAS MƏZMUN VƏ MASALAR QRİDİ */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 16px 24px;
+}
+
+.section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.status-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-empty {
+  background: var(--empty-badge-bg);
+}
+
+.dot-busy {
+  background: var(--busy-badge-bg);
+}
+
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* Masa Qrup Başlıqları (Masalar 1-6 və Həyət 1-9) */
+.table-group-header-wrap {
+  grid-column: 1 / -1;
+  margin-top: 14px;
+  margin-bottom: 2px;
+}
+
+.table-group-header-wrap:first-child {
+  margin-top: 0;
+}
+
+.table-group-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-group-count {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+  background: #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.table-card-history-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0369a1;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+/* Ekran 2: Bu Masada Əvvəl Bağlanan Hesablar */
+.table-closed-bills-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.table-closed-bills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.closed-bill-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+.closed-bill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.closed-bill-time {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.closed-bill-amount {
+  color: #16a34a;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.closed-bill-items {
+  font-size: 0.8rem;
+  color: #475569;
+  line-height: 1.35;
+  background: #f8fafc;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+}
+
+/* Hesabat pəncərəsində Masalar Üzrə Bağlanmış Hesablar */
+.report-table-group-item {
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 12px;
+}
+
+.report-table-group-item:last-child {
+  border-bottom: none;
+}
+
+.report-table-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.report-table-group-sum {
+  color: #166534;
+}
+
+.report-bill-sub-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: #475569;
+  padding: 3px 0;
+  border-top: 1px dashed #f1f5f9;
+}
+
+.report-bill-sub-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-bill-sub-items {
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.table-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 118px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 2px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.table-card:active {
+  transform: scale(0.97);
+}
+
+/* Boş Masa Kartı */
+.table-card.is-empty {
+  background-color: var(--empty-bg);
+  border-color: var(--empty-border);
+  color: var(--empty-text);
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.08);
+}
+
+/* Dolu Masa Kartı */
+.table-card.is-busy {
+  background-color: var(--busy-bg);
+  border-color: var(--busy-border);
+  color: var(--text-main);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.16);
+}
+
+.table-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.table-card-name {
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.table-status-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.table-card.is-empty .table-status-pill {
+  background: rgba(16, 185, 129, 0.18);
+  color: #047857;
+}
+
+.table-card.is-busy .table-status-pill {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.table-card-bottom {
+  margin-top: 16px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.table-card-status-text {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.table-card.is-empty .table-card-status-text {
+  color: #059669;
+}
+
+.table-card.is-busy .table-card-status-text {
+  font-size: 1.45rem;
+  color: #b45309;
+}
+
+.table-card-meta {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #78716c;
+}
+
+/* SABİT ALT PANEL */
+.bottom-bar {
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-color);
+  padding: 12px 16px calc(var(--safe-bottom) + 12px);
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.bottom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.94rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.bottom-btn:active {
+  transform: scale(0.97);
+}
+
+.btn-expense {
+  background: var(--expense-bg);
+  color: var(--expense-color);
+  border: 1.5px solid #fecaca;
+}
+
+.btn-report {
+  background: var(--report-color);
+  color: #ffffff;
+}
+
+.btn-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* EKRAN 2: MASA SİFARİŞİ VƏ HESAB PANELİ */
+.panel-header {
+  background: var(--bg-header);
+  color: #ffffff;
+  padding: calc(var(--safe-top) + 12px) 14px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 1rem;
+  font-weight: 700;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.back-btn:active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.back-arrow {
+  font-size: 1.4rem;
+  line-height: 0.8;
+}
+
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.table-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.badge-empty {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.badge-busy {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+.header-spacer {
+  width: 76px;
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.subsection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.subsection-title {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.subsection-hint {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.item-count-pill {
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* Sifariş Siyahısı */
+.order-list {
+  background: var(--bg-surface);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.empty-order-box {
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 10px;
+}
+
+.order-row:last-child {
+  border-bottom: none;
+}
+
+.order-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-item-name {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.25;
+}
+
+.order-item-unit {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.order-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.qty-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: var(--text-main);
+  font-size: 1.25rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.qty-btn:active {
+  background: #e2e8f0;
+  transform: scale(0.94);
+}
+
+.qty-btn.qty-minus {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.qty-btn.qty-plus {
+  color: #16a34a;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.order-item-qty {
+  min-width: 24px;
+  text-align: center;
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.order-item-total {
+  min-width: 72px;
+  text-align: right;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+/* TEZ SEÇİM BÖLMƏSİ (SADƏ ÇAY, PİVƏ 1.70, ARAQ 100Q) */
+.pinned-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.menu-btn-bottom-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+
+.menu-btn-bottom-row .menu-btn-price {
+  margin-top: 0;
+}
+
+.tea-toggle-price-btn {
+  padding: 5px 10px;
+  border-radius: 9px;
+  border: 1.5px solid #cbd5e1;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.08s ease, background-color 0.1s ease;
+}
+
+.tea-toggle-price-btn:active {
+  transform: scale(0.93);
+}
+
+.tea-toggle-price-btn.is-one-manat {
+  background: #dcfce7;
+  border-color: #4ade80;
+  color: #166534;
+}
+
+/* 2 SÜTUNLU KVADRAT KATEQORİYA KARTLARI (MASALAR KİMİ) */
+.quick-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.category-square-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 112px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 2px solid #cbd5e1;
+  background: #ffffff;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05);
+  transition: transform 0.1s ease, border-color 0.12s ease;
+}
+
+.category-square-card:active {
+  transform: scale(0.96);
+  border-color: var(--accent-blue);
+  background: #f8fafc;
+}
+
+.category-square-card.has-active-items {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.14);
+}
+
+.category-square-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.category-square-name {
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.22;
+  color: var(--text-main);
+}
+
+.category-square-badge {
+  background: #f59e0b;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.category-square-bottom {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.category-square-count {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.category-square-arrow {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #64748b;
+}
+
+/* Kateqoriya içindən geri qayıtma düyməsi */
+.category-back-bar {
+  grid-column: 1 / -1;
+  min-height: 50px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 2px solid #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.category-back-bar:active {
+  transform: scale(0.98);
+  background: #1e293b;
+}
+
+/* Menyu Məhsul Düymələri */
+.menu-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  min-height: 92px;
+  padding: 14px;
+  background: var(--bg-surface);
+  border: 2px solid #cbd5e1;
+  border-radius: 18px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  transition: transform 0.08s ease, border-color 0.1s ease, background-color 0.1s ease;
+}
+
+.menu-btn:active {
+  transform: scale(0.96);
+  background: #eff6ff;
+  border-color: var(--accent-blue);
+}
+
+.menu-btn.has-qty {
+  border-color: #3b82f6;
+  background: #f0f7ff;
+}
+
+.menu-btn.menu-btn-custom {
+  border-style: dashed;
+  border-color: #6366f1;
+  background: #eef2ff;
+  min-height: 112px;
+}
+
+.menu-btn.menu-btn-custom .menu-btn-title {
+  color: #3730a3;
+  font-size: 1.08rem;
+}
+
+.menu-btn.menu-btn-custom .menu-btn-price {
+  color: #4f46e5;
+}
+
+.menu-btn-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+
+.menu-btn-title {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.25;
+}
+
+.menu-btn-qty-badge {
+  background: var(--accent-blue);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.menu-btn-price {
+  margin-top: 10px;
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--accent-blue);
+}
+
+/* EKRAN 2 ALT HESAB PANELİ */
+.panel-footer {
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-color);
+  padding: 14px 16px calc(var(--safe-bottom) + 14px);
+  flex-shrink: 0;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
+}
+
+.bill-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.bill-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.bill-total-amount {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.close-bill-btn {
+  width: 100%;
+  min-height: 58px;
+  background: var(--primary);
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  font-size: 1.12rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.28);
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+
+.close-bill-btn:active {
+  transform: scale(0.98);
+  background: var(--primary-active);
+}
+
+.close-bill-btn:disabled {
+  background: #cbd5e1;
+  color: #64748b;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* MODALLAR */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.62);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay.open {
+  display: flex;
+}
+
+.modal-sheet {
+  width: 100%;
+  max-width: 540px;
+  max-height: 90dvh;
+  background: var(--bg-surface);
+  border-radius: 22px 22px 0 0;
+  padding-bottom: var(--safe-bottom);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.18s ease-out;
+}
+
+.modal-sheet-full {
+  height: 95dvh;
+  max-height: 95dvh;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.modal-header h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.report-main-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.report-date-sub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.modal-close-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.report-scroll-body {
+  flex: 1;
+  padding-bottom: 28px;
+}
+
+/* Tez Seçim Düymələri (Xərc Çipləri) */
+.quick-Preset-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.chip-btn {
+  min-height: 42px;
+  padding: 6px 8px;
+  border-radius: 11px;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s ease, background-color 0.1s ease;
+}
+
+.chip-btn:active {
+  transform: scale(0.95);
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field span {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.form-field input {
+  height: 50px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1.5px solid #cbd5e1;
+  font-size: 1.02rem;
+  font-weight: 600;
+}
+
+.form-field input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.primary-submit-btn {
+  min-height: 54px;
+  border: none;
+  border-radius: 14px;
+  background: var(--expense-color);
+  color: #ffffff;
+  font-size: 1.02rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-submit-btn:active {
+  transform: scale(0.98);
+}
+
+.primary-submit-btn.btn-blue {
+  background: var(--accent-blue);
+}
+
+.modal-list-wrap {
+  padding: 0 18px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.mini-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mini-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mini-total-expense {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--expense-color);
+}
+
+.mini-list {
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.95rem;
+  font-weight: 600;
+  gap: 10px;
+}
+
+.mini-row:last-child {
+  border-bottom: none;
+}
+
+.expense-row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.delete-expense-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-expense-btn:active {
+  transform: scale(0.92);
+  background: #fee2e2;
+}
+
+.mini-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* PƏNCƏRƏ SATIŞI REJİMİ */
+.window-cart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.window-cart-summary-box {
+  background: #ffffff;
+  border: 1.5px solid var(--border-color);
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05);
+}
+
+.window-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.window-total-label {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #475569;
+}
+
+.window-total-amount {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.window-cart-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+}
+
+.btn-window-clear {
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1.5px solid #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.98rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.btn-window-clear:active {
+  transform: scale(0.96);
+  background: #fee2e2;
+}
+
+.btn-window-checkout {
+  min-height: 52px;
+  border-radius: 14px;
+  border: none;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 1.1rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.28);
+  transition: transform 0.08s ease, background-color 0.1s ease;
+}
+
+.btn-window-checkout:active {
+  transform: scale(0.97);
+  background: var(--primary-active);
+}
+
+.btn-window-checkout:disabled {
+  background: #cbd5e1;
+  color: #64748b;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.window-menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Kassa Növü Seçimi (Xərc Modalı) */
+.expense-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.radio-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border: 2px solid #cbd5e1;
+  border-radius: 12px;
+  cursor: pointer;
+  background: #f8fafc;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #475569;
+  transition: all 0.12s ease;
+}
+
+.radio-chip input {
+  display: none;
+}
+
+.radio-chip:has(input:checked) {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.expense-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-right: 6px;
+  text-transform: uppercase;
+}
+
+.expense-badge.kafe {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.expense-badge.pencere {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+/* Hesabat Blokları (Kafe və Pəncərə Ayrımı) */
+.report-block {
+  border: 1.5px solid var(--border-color);
+  border-radius: 18px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.report-block-cafe {
+  border-color: #bfdbfe;
+}
+
+.report-block-window {
+  border-color: #fde68a;
+  background: #fffdfa;
+}
+
+.report-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1.5px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.report-block-header h4 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.report-badge-net {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #16a34a;
+  background: #f0fdf4;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #bbf7d0;
+}
+
+.net-cash-sub {
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* KASSA HESABATI KARTLARI */
+.net-cash-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #ffffff;
+  padding: 18px 16px;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+}
+
+.net-cash-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  letter-spacing: 0.03em;
+}
+
+.net-cash-value {
+  font-size: 2.15rem;
+  font-weight: 900;
+  color: #4ade80;
+  letter-spacing: -0.02em;
+}
+
+.report-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.report-card {
+  padding: 13px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.report-card-label {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.report-card-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.card-income {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.card-expense {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.open-tables-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 11px 14px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.report-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Keçmiş Hesabatlar Cədvəli */
+.history-toggle-btn {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 0.94rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.history-box {
+  margin-top: 4px;
+}
+
+.history-table-wrap {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.history-table th {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 800;
+  text-align: left;
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.history-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.history-table tr:last-child td {
+  border-bottom: none;
+}
+
+.report-actions {
+  margin-top: 6px;
+}
+
+.danger-reset-btn {
+  width: 100%;
+  min-height: 58px;
+  border-radius: 16px;
+  border: none;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 1.06rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.danger-reset-btn:active {
+  transform: scale(0.98);
+  background: #b91c1c;
+}
+
+/* TƏSDİQ MODALI (CONFIRM DIALOG) */
+.confirm-overlay {
+  align-items: center;
+  padding: 20px;
+  z-index: 150;
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 380px;
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 24px 20px 20px;
+  text-align: center;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.35);
+}
+
+.confirm-icon {
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+}
+
+.confirm-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+  color: var(--text-main);
+}
+
+.confirm-text {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #475569;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.confirm-btn {
+  min-height: 50px;
+  border-radius: 14px;
+  border: none;
+  font-size: 0.96rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.btn-confirm-danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* BİLDİRİŞ (TOAST) */
+.toast-container {
+  position: fixed;
+  top: calc(var(--safe-top) + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: calc(100% - 32px);
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.toast {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+  text-align: center;
+  animation: fadeToast 0.2s ease-out;
+}
+
+@keyframes fadeToast {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================================
+   ROL SƏLAHİYYƏTLƏRİ (OFİSİANT PROFİLİNDƏ MALİYYƏ VƏ HESABAT GİZLİDİR)
+   ============================================================================ */
+body.role-waiter .admin-only-el {
+  display: none !important;
+}
+
+body.role-waiter .bottom-bar {
+  grid-template-columns: 1fr;
+}
+
+/* Ofisiant Nişanı və Silmə ('✕') Düyməsi */
+.waiter-tag-pill {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #e0e7ff;
+  color: #3730a3;
+  margin-left: 5px;
+}
+
+.delete-record-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.85rem;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.08s ease, background-color 0.1s ease;
+}
+
+.delete-record-btn:active {
+  transform: scale(0.9);
+  background: #fee2e2;
+}
+
+.bill-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================================================
+   XÜSUSİ ARXİV / KEÇMİŞ GÜNLƏR MODALI (DETALLI TARİXÇƏ)
+   ============================================================================ */
+.archive-days-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.archive-day-card {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-color);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.05);
+}
+
+.archive-day-top {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  background: var(--bg-surface);
+}
+
+.archive-day-top:active {
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.archive-day-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.archive-day-date {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.archive-day-sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.archive-day-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.archive-day-net {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #16a34a;
+}
+
+.archive-day-details {
+  display: none;
+  padding: 14px 16px 16px;
+  border-top: 1.5px solid var(--border-color);
+  background: var(--bg-app);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.archive-day-card.expanded .archive-day-details {
+  display: flex;
+}
+
+.archive-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.archive-mini-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.archive-mini-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.archive-mini-val {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.archive-detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ============================================================================
+   QARANLIQ REJİM (DARK MODE — #121212 KONTRASLI GECƏ DİZAYNI)
+   ============================================================================ */
+body.dark-mode {
+  --bg-app: #121212;
+  --bg-surface: #1e1e1e;
+  --bg-header: #0a0e17;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-color: #2e2e2e;
+
+  /* Boş masa (Tünd yaşıl kontrastlı) */
+  --empty-bg: rgba(16, 185, 129, 0.12);
+  --empty-border: #10b981;
+  --empty-text: #6ee7b7;
+  --empty-badge-bg: #059669;
+
+  /* Dolu masa (Tünd kəhrəba kontrastlı) */
+  --busy-bg: rgba(245, 158, 11, 0.15);
+  --busy-border: #f59e0b;
+  --busy-text: #fde68a;
+  --busy-badge-bg: #d97706;
+
+  --expense-bg: rgba(220, 38, 38, 0.16);
+  --report-color: #2563eb;
+  --accent-blue: #3b82f6;
+}
+
+body.dark-mode .section-title,
+body.dark-mode .subsection-title,
+body.dark-mode .table-group-title,
+body.dark-mode .form-field span,
+body.dark-mode .bill-label,
+body.dark-mode .window-total-label,
+body.dark-mode .confirm-title {
+  color: #e2e8f0;
+}
+
+body.dark-mode .table-group-count,
+body.dark-mode .item-count-pill {
+  background: #2a2a2a;
+  color: #cbd5e1;
+}
+
+body.dark-mode .table-card.is-empty .table-status-pill {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6ee7b7;
+}
+
+body.dark-mode .table-card.is-empty .table-card-status-text {
+  color: #34d399;
+}
+
+body.dark-mode .table-card.is-busy .table-status-pill {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fde68a;
+  border-color: #f59e0b;
+}
+
+body.dark-mode .table-card.is-busy .table-card-status-text {
+  color: #fbbf24;
+}
+
+body.dark-mode .table-card-meta {
+  color: #a8a29e;
+}
+
+body.dark-mode .table-card-history-badge {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+}
+
+body.dark-mode .mode-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+body.dark-mode .category-square-card,
+body.dark-mode .menu-btn,
+body.dark-mode .window-cart-summary-box,
+body.dark-mode .closed-bill-card,
+body.dark-mode .report-block,
+body.dark-mode .history-table-wrap,
+body.dark-mode .confirm-dialog {
+  background: #1e1e1e;
+  border-color: #333333;
+  color: #f1f5f9;
+}
+
+body.dark-mode .category-square-card.has-active-items {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+}
+
+body.dark-mode .menu-btn.has-qty {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: #3b82f6;
+}
+
+body.dark-mode .menu-btn.menu-btn-custom {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: #818cf8;
+}
+
+body.dark-mode .menu-btn.menu-btn-custom .menu-btn-title {
+  color: #c7d2fe;
+}
+
+body.dark-mode .menu-btn.menu-btn-custom .menu-btn-price {
+  color: #a5b4fc;
+}
+
+body.dark-mode .tea-toggle-price-btn {
+  background: #2a2a2a;
+  border-color: #404040;
+  color: #f1f5f9;
+}
+
+body.dark-mode .tea-toggle-price-btn.is-one-manat {
+  background: rgba(22, 163, 74, 0.25);
+  border-color: #4ade80;
+  color: #86efac;
+}
+
+body.dark-mode .category-back-bar {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+body.dark-mode .order-row,
+body.dark-mode .history-table td {
+  border-bottom-color: #2a2a2a;
+}
+
+body.dark-mode .qty-btn {
+  background: #262626;
+  border-color: #404040;
+  color: #f1f5f9;
+}
+
+body.dark-mode .qty-btn.qty-minus {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+
+body.dark-mode .qty-btn.qty-plus {
+  background: rgba(22, 163, 74, 0.18);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #86efac;
+}
+
+body.dark-mode .closed-bill-items,
+body.dark-mode .mini-list,
+body.dark-mode .chip-btn,
+body.dark-mode .radio-chip,
+body.dark-mode .history-toggle-btn {
+  background: #161616;
+  border-color: #333333;
+  color: #e2e8f0;
+}
+
+body.dark-mode .radio-chip:has(input:checked) {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+body.dark-mode .form-field input {
+  background: #141414;
+  border-color: #383838;
+  color: #f8fafc;
+}
+
+body.dark-mode .modal-close-btn,
+body.dark-mode .btn-cancel {
+  background: #2a2a2a;
+  color: #e2e8f0;
+}
+
+body.dark-mode .card-income {
+  background: rgba(22, 163, 74, 0.16);
+  border-color: rgba(74, 222, 128, 0.35);
+  color: #86efac;
+}
+
+body.dark-mode .card-expense {
+  background: rgba(220, 38, 38, 0.16);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+body.dark-mode .report-badge-net {
+  background: rgba(22, 163, 74, 0.2);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #86efac;
+}
+
+body.dark-mode .open-tables-banner {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+}
+
+body.dark-mode .history-table th {
+  background: #262626;
+  color: #cbd5e1;
+}
+
+body.dark-mode .report-bill-sub-item {
+  color: #cbd5e1;
+  border-top-color: #2e2e2e;
+}
+
+body.dark-mode .confirm-text {
+  color: #cbd5e1;
+}
+
+body.dark-mode .quick-waiter-btn {
+  color: #34d399;
+}
+
+body.dark-mode .btn-expense,
+body.dark-mode .btn-window-clear,
+body.dark-mode .delete-expense-btn,
+body.dark-mode .delete-record-btn {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+
+body.dark-mode .waiter-tag-pill {
+  background: rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+}
+
+body.dark-mode .archive-day-card,
+body.dark-mode .archive-day-top,
+body.dark-mode .archive-mini-box {
+  background: #1e1e1e;
+  border-color: #333333;
+  color: #f1f5f9;
+}
+
+body.dark-mode .archive-day-details {
+  background: #141414;
+  border-top-color: #333333;
+}
+
+body.dark-mode .close-bill-btn:disabled,
+body.dark-mode .btn-window-checkout:disabled {
+  background: #2a2a2a;
+  color: #64748b;
+}

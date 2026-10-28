@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BabaBala">
+  <meta name="theme-color" content="#0f172a">
+  <title>BabaBala — Kassa və Masa İdarəetməsi</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- EKRAN 1: ƏSAS MASA GÖRÜNÜŞÜ (ANA SƏHİFƏ) -->
+  <div id="mainScreen" class="screen active">
+    <header class="app-header">
+      <!-- Yuxarı İdarəetmə Sətri: Brend, Canlı Status və Qaranlıq Rejim -->
+      <div class="header-utility-row">
+        <div class="brand-block">
+          <div class="brand-title-row">
+            <h1 class="brand-title">BabaBala</h1>
+            <span id="syncStatusBtn" class="sync-status-pill sync-live" title="Canlı Sinxronizasiya Vəziyyəti">
+              <span id="syncStatusDot" class="sync-dot"></span>
+              <span id="syncStatusText">🟢 Canlı</span>
+            </span>
+          </div>
+          <span id="currentDate" class="current-date"></span>
+        </div>
+
+        <div class="header-controls">
+          <button type="button" id="openArchiveHeaderBtn" class="role-badge-btn is-admin admin-only-el" aria-label="Arxiv və Keçmiş Günlər">
+            <span>📅</span>
+            <span>Arxiv</span>
+          </button>
+          <button type="button" id="themeToggleBtn" class="header-icon-btn" aria-label="Qaranlıq və ya İşıqlı rejim">
+            <span id="themeToggleIcon">🌙</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Yalnız Admin üçün Görünən Kassa Məlumatı -->
+      <div id="adminSalesRow" class="header-sales-row admin-only-el">
+        <div class="daily-sales-box">
+          <div class="daily-sales-left">
+            <span id="headerSalesLabel" class="sales-label">Kafe Xalis Kassa</span>
+            <span id="headerSubInfo" class="sales-sub">Satış: 0.00 ₼</span>
+          </div>
+          <strong id="headerTotalSales" class="sales-amount">0.00 ₼</strong>
+        </div>
+      </div>
+
+      <!-- Rejim Keçid Zolağı (Kafe vs Pəncərə) -->
+      <div class="mode-switch-bar">
+        <button type="button" id="modeCafeBtn" class="mode-btn active">
+          <span>🍽 Kafe Masaları</span>
+        </button>
+        <button type="button" id="modeWindowBtn" class="mode-btn">
+          <span>🪟 Pəncərə Satışı</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- 1. KAFE MASALARI REJİMİ -->
+      <div id="cafeView" class="mode-view active">
+        <div class="section-bar">
+          <h2 class="section-title">Masalar</h2>
+          <div class="status-legend">
+            <span class="legend-item"><i class="dot dot-empty"></i> Boş</span>
+            <span class="legend-item"><i class="dot dot-busy"></i> Dolu</span>
+          </div>
+        </div>
+
+        <!-- Masalar Qridi (2 sütunlu, böyük kartlar) -->
+        <div id="tablesGrid" class="tables-grid"></div>
+      </div>
+
+      <!-- 2. PƏNCƏRƏ SATIŞI REJİMİ (Ayaqüstü / Al-Apar) -->
+      <div id="windowView" class="mode-view" style="display: none;">
+        <!-- Cari Səbət / Sifariş siyahısı -->
+        <section class="window-cart-section">
+          <div class="subsection-header">
+            <h3 class="subsection-title">Pəncərə Səbəti</h3>
+            <span id="windowCartCountPill" class="item-count-pill">0 məhsul</span>
+          </div>
+          <div id="windowCartList" class="order-list"></div>
+
+          <div class="window-cart-summary-box">
+            <div class="window-total-row">
+              <span class="window-total-label">Cəmi Məbləğ:</span>
+              <strong id="windowCartTotal" class="window-total-amount">0.00 ₼</strong>
+            </div>
+            <div class="window-cart-actions">
+              <button type="button" id="windowClearCartBtn" class="btn-window-clear">Təmizlə</button>
+              <button type="button" id="windowCheckoutBtn" class="btn-window-checkout" disabled>Ödənildi / Vur</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Pəncərə Menyusu (İri Düymələr) -->
+        <section class="window-menu-section">
+          <div class="subsection-header">
+            <h3 class="subsection-title">Pəncərə Menyusu</h3>
+            <span class="subsection-hint">Toxunaraq səbətə əlavə et</span>
+          </div>
+          <div id="windowMenuGrid" class="quick-menu-grid"></div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Sabit Alt Panel (Xərc düyməsi həm Ofisiant, həm Admin üçün; Hesabat yalnız Admin üçün) -->
+    <footer id="mainBottomBar" class="bottom-bar">
+      <button type="button" id="openExpenseBtn" class="bottom-btn btn-expense">
+        <span class="btn-icon">−</span>
+        <span>Xərc Əlavə Et (-)</span>
+      </button>
+      <button type="button" id="openReportBtn" class="bottom-btn btn-report admin-only-el">
+        <span class="btn-icon">📊</span>
+        <span>Günün Sonu / Kassa Hesabatı</span>
+      </button>
+    </footer>
+  </div>
+
+  <!-- EKRAN 2: MASA SİFARİŞİ VƏ HESAB PANELİ -->
+  <div id="tableScreen" class="screen" aria-hidden="true">
+    <header class="panel-header">
+      <button type="button" id="backToMainBtn" class="back-btn">
+        <span class="back-arrow">‹</span> Geri
+      </button>
+      <div class="panel-title-wrap">
+        <h2 id="activeTableName" class="panel-title">Masa 1</h2>
+        <span id="activeTableBadge" class="table-badge badge-empty">Boş</span>
+      </div>
+      <div class="header-spacer"></div>
+    </header>
+
+    <div class="panel-body">
+      <!-- Sifariş Siyahısı -->
+      <section class="order-section">
+        <div class="subsection-header">
+          <h3 class="subsection-title">Sifariş Siyahısı</h3>
+          <span id="orderItemCount" class="item-count-pill">0 məhsul</span>
+        </div>
+        <div id="orderList" class="order-list"></div>
+      </section>
+
+      <!-- Bu Masada Əvvəl Bağlanan Hesablar (Yalnız Adminə görünür, '✕' ilə silinə bilir) -->
+      <section id="tableClosedBillsSection" class="table-closed-bills-section" style="display: none;">
+        <div class="subsection-header">
+          <h3 class="subsection-title">Bu Masada Əvvəl Bağlananlar</h3>
+          <span id="tableClosedBillsTotalPill" class="item-count-pill">0.00 ₼</span>
+        </div>
+        <div id="tableClosedBillsList" class="table-closed-bills-list"></div>
+      </section>
+
+      <!-- Tez Seçilən Məhsullar (Sadə Çay +/- qiymətlə, Pivə 1.70, Süzmə Araq 100q) -->
+      <section class="Pinned-section">
+        <div class="subsection-header">
+          <h3 class="subsection-title">Tez Seçim</h3>
+          <span class="subsection-hint">Birbaşa masaya əlavə et</span>
+        </div>
+        <div id="pinnedQuickGrid" class="pinned-quick-grid"></div>
+      </section>
+
+      <!-- Menyu Kateqoriyaları (2 Sütunlu Kvadrat Kartlar) və ya Seçilmiş Kateqoriyanın Məhsulları -->
+      <section class="menu-section">
+        <div id="menuSectionHeader" class="subsection-header">
+          <h3 id="menuSectionTitle" class="subsection-title">Menyu Kateqoriyaları</h3>
+          <span id="menuSectionHint" class="subsection-hint">Kateqoriyaya toxunun</span>
+        </div>
+
+        <!-- 2 Sütunlu Kvadrat Kateqoriya Kartları və ya Məhsul Düymələri -->
+        <div id="quickMenuGrid" class="quick-menu-grid"></div>
+      </section>
+    </div>
+
+    <!-- Masa Hesabı və Bağlama Paneli -->
+    <footer class="panel-footer">
+      <div class="bill-summary-row">
+        <span class="bill-label">Masanın Toplam Hesabı:</span>
+        <strong id="activeTableTotal" class="bill-total-amount">0.00 ₼</strong>
+      </div>
+      <button type="button" id="closeBillBtn" class="close-bill-btn">
+        Hesabı Bağla (Ödənildi)
+      </button>
+    </footer>
+  </div>
+
+  <!-- MODAL 1: XƏRC ƏLAVƏETMƏ SİSTEMİ (Ofisiant və Admin üçün açıq) -->
+  <div id="expenseModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h3>Xərc Əlavə Et (-)</h3>
+        <button type="button" id="closeExpenseModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+
+      <form id="expenseForm" class="modal-body">
+        <div class="form-field">
+          <span>Kassa növü</span>
+          <div class="expense-type-toggle">
+            <label class="radio-chip">
+              <input type="radio" name="expenseType" value="kafe" checked>
+              <span>🍽 Kafe Xərci</span>
+            </label>
+            <label class="radio-chip">
+              <input type="radio" name="expenseType" value="pencere">
+              <span>🪟 Pəncərə Xərci</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <span>Tez seçim</span>
+          <div id="expensePresetChips" class="quick-Preset-chips">
+            <button type="button" class="chip-btn" data-preset="Çörək">Çörək</button>
+            <button type="button" class="chip-btn" data-preset="Araq">Araq</button>
+            <button type="button" class="chip-btn" data-preset="Pivə">Pivə</button>
+            <button type="button" class="chip-btn" data-preset="Xiyar & Pomidor">Xiyar &amp; Pomidor</button>
+          </div>
+        </div>
+
+        <label class="form-field">
+          <span>Xərcin adı</span>
+          <input type="text" id="expenseTitleInput" required autocomplete="off" placeholder="Xərcin adını yazın və ya yuxarıdan seçin...">
+        </label>
+
+        <label class="form-field">
+          <span>Məbləğ (₼)</span>
+          <input type="number" id="expenseAmountInput" step="0.01" min="0.05" required inputmode="decimal" placeholder="0.00">
+        </label>
+
+        <button type="submit" class="primary-submit-btn">Xərci Qeyd Et</button>
+      </form>
+
+      <!-- Bugünkü Xərclərin Ümumi Siyahısı və Cəmi yalnız Adminə görünür -->
+      <div class="modal-list-wrap admin-only-el">
+        <div class="mini-header-row">
+          <h4 class="mini-title">Bugünkü Xərclər</h4>
+          <strong id="modalExpenseTotal" class="mini-total-expense">-0.00 ₼</strong>
+        </div>
+        <div id="expensesList" class="mini-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: SƏRBƏST QİYMƏT (CUSTOM MƏBLƏĞ) -->
+  <div id="customItemModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h3>Sərbəst Qiymət Əlavə Et</h3>
+        <button type="button" id="closeCustomItemModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <form id="customItemForm" class="modal-body">
+        <label class="form-field">
+          <span>Sifarişin adı</span>
+          <input type="text" id="customItemNameInput" required autocomplete="off" placeholder="Məs: Əlavə sifariş, Kabab, İçki...">
+        </label>
+        <label class="form-field">
+          <span>Qiymət (₼)</span>
+          <input type="number" id="customItemPriceInput" step="0.01" min="0.10" required inputmode="decimal" placeholder="0.00">
+        </label>
+        <button type="submit" class="primary-submit-btn btn-blue">Masaya Əlavə Et</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 3: GÜNÜN SONU / KASSA HESABATI EKRANI (Yalnız Admin) -->
+  <div id="reportModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet modal-sheet-full">
+      <div class="modal-header report-modal-header">
+        <div>
+          <h3 class="report-main-title">BabaBala — Günlük Hesabat</h3>
+          <span id="reportDateSub" class="report-date-sub"></span>
+        </div>
+        <button type="button" id="closeReportModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+
+      <div class="modal-body report-scroll-body">
+        <!-- C) ÜMUMİ YEKUN (HƏR İKİ KASSA) -->
+        <div class="net-cash-hero">
+          <span class="net-cash-label">ÜMUMİ XALİS QAZANC (Kafe + Pəncərə)</span>
+          <strong id="reportGrandNetCash" class="net-cash-value">0.00 ₼</strong>
+          <span id="reportGrandBreakdown" class="net-cash-sub">Kafe: 0.00 ₼ | Pəncərə: 0.00 ₼</span>
+        </div>
+
+        <!-- OFİSİANTLAR ÜZRƏ GÜNDƏLİK DÖVRİYYƏ BLOKU -->
+        <div class="report-block">
+          <div class="report-block-header">
+            <h4>👨‍🍳 OFİSİANTLAR ÜZRƏ DÖVRİYYƏ</h4>
+          </div>
+          <div id="reportWaiterStatsList" class="mini-list"></div>
+        </div>
+
+        <!-- A) 🍽 KAFE KASSASI BLOKU -->
+        <div class="report-block report-block-cafe">
+          <div class="report-block-header">
+            <h4>🍽 KAFE KASSASI</h4>
+            <span id="reportCafeNetBadge" class="report-badge-net">Xalis: 0.00 ₼</span>
+          </div>
+
+          <div class="report-cards">
+            <div class="report-card card-income">
+              <span class="report-card-label">Kafe Satışı (Brutto)</span>
+              <strong id="reportCafeSales" class="report-card-value">0.00 ₼</strong>
+            </div>
+            <div class="report-card card-expense">
+              <span class="report-card-label">Kafe Xərcləri</span>
+              <strong id="reportCafeExpenses" class="report-card-value">-0.00 ₼</strong>
+            </div>
+          </div>
+
+          <div id="openTablesWarningBox" class="open-tables-banner" style="display: none;">
+            <span>Açıq masalarda gözləyən hesab:</span>
+            <strong id="reportOpenTablesAmount">0.00 ₼</strong>
+          </div>
+
+          <!-- Masalar Üzrə Bağlanmış Hesablar (Admin '✕' ilə silə bilir) -->
+          <div class="report-section">
+            <h5 class="mini-title">Kafe Masaları Üzrə Hesablar</h5>
+            <div id="reportTableBillsList" class="mini-list"></div>
+          </div>
+
+          <!-- Satılan Kafe Məhsulları -->
+          <div class="report-section">
+            <h5 class="mini-title">Satılan Kafe Yemək və İçkiləri (İnventar)</h5>
+            <div id="reportSoldItems" class="mini-list"></div>
+          </div>
+
+          <!-- Kafe Xərcləri -->
+          <div class="report-section">
+            <h5 class="mini-title">Kafe Xərcləri</h5>
+            <div id="reportCafeExpensesList" class="mini-list"></div>
+          </div>
+        </div>
+
+        <!-- B) 🪟 PƏNCƏRƏ KASSASI BLOKU -->
+        <div class="report-block report-block-window">
+          <div class="report-block-header">
+            <h4>🪟 PƏNCƏRƏ KASSASI</h4>
+            <span id="reportWindowNetBadge" class="report-badge-net">Xalis: 0.00 ₼</span>
+          </div>
+
+          <div class="report-cards">
+            <div class="report-card card-income">
+              <span class="report-card-label">Pəncərə Satışı</span>
+              <strong id="reportWindowSales" class="report-card-value">0.00 ₼</strong>
+            </div>
+            <div class="report-card card-expense">
+              <span class="report-card-label">Pəncərə Xərcləri</span>
+              <strong id="reportWindowExpenses" class="report-card-value">-0.00 ₼</strong>
+            </div>
+          </div>
+
+          <!-- Pəncərə Məhsullarının Satış Sayı -->
+          <div class="report-section">
+            <h5 class="mini-title">Satılan Peraşki və Dürməklər (İnventar)</h5>
+            <div id="reportWindowSoldItems" class="mini-list"></div>
+          </div>
+
+          <!-- Pəncərə Xərcləri -->
+          <div class="report-section">
+            <h5 class="mini-title">Pəncərə Xərcləri</h5>
+            <div id="reportWindowExpensesList" class="mini-list"></div>
+          </div>
+        </div>
+
+        <!-- Xüsusi Arxiv Bölməsinə Keçid Düyməsi -->
+        <div class="report-section">
+          <button type="button" id="openArchiveFromReportBtn" class="history-toggle-btn">
+            <span>📅 Arxiv / Keçmiş Günlər (Detallı Tarixçə)</span>
+            <span>›</span>
+          </button>
+        </div>
+
+        <!-- Növbəni Bitir və Sıfırla -->
+        <div class="report-actions">
+          <button type="button" id="endDayResetBtn" class="danger-reset-btn">
+            Növbəni Bitir (Günü Bağla)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: TƏHLÜKƏSİZLİK TƏSDİQİ (CONFIRM MODALI) -->
+  <div id="confirmResetModal" class="modal-overlay confirm-overlay" aria-hidden="true">
+    <div class="confirm-dialog">
+      <div class="confirm-icon">⚠️</div>
+      <h3 class="confirm-title">Növbəni Bitir</h3>
+      <p class="confirm-text">
+        Günü bağlamaq istədiyinizdən əminsiniz? Həm kafe masaları, həm də pəncərə kassası arxivlənərək sıfırlanacaq.
+      </p>
+      <div class="confirm-actions">
+        <button type="button" id="cancelResetBtn" class="confirm-btn btn-cancel">Ləğv Et</button>
+        <button type="button" id="confirmResetBtn" class="confirm-btn btn-confirm-danger">Bəli, Günü Bağla</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: XÜSUSİ ARXİV / KEÇMİŞ GÜNLƏR MODALI (Yalnız Admin Üçün) -->
+  <div id="archiveModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet modal-sheet-full">
+      <div class="modal-header report-modal-header">
+        <div>
+          <h3 class="report-main-title">📅 Arxiv — Keçmiş Günlər</h3>
+          <span class="report-date-sub">Gün üzərinə toxunaraq satılan məhsullara və detallara baxın</span>
+        </div>
+        <button type="button" id="closeArchiveModalBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+
+      <div class="modal-body report-scroll-body">
+        <div id="archiveDaysList" class="archive-days-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bildiriş (Toast) -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
