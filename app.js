@@ -215,7 +215,7 @@ function resolveUserRoleFromUrlOrStorage() {
     const rawParam = (params.get("rol") || "").trim().toLowerCase();
     if (rawParam === "admin" || rawParam === "waiter1" || rawParam === "waiter2") {
       localStorage.setItem(ROLE_STORAGE_KEY, rawParam);
-      return rawParam;
+      return { role: rawParam, needsSelection: false };
     }
   } catch (err) {
     // Ignore URL parse error
@@ -223,10 +223,11 @@ function resolveUserRoleFromUrlOrStorage() {
 
   const savedRole = (localStorage.getItem(ROLE_STORAGE_KEY) || "").trim().toLowerCase();
   if (savedRole === "admin" || savedRole === "waiter1" || savedRole === "waiter2") {
-    return savedRole;
+    return { role: savedRole, needsSelection: false };
   }
-  localStorage.setItem(ROLE_STORAGE_KEY, "waiter1");
-  return "waiter1";
+
+  // Nə URL-də parametr tapıldı, nə də localStorage-də qeyd olunmuş rol var (iOS PWA ilk açılış):
+  return { role: "waiter1", needsSelection: true };
 }
 
 // Köhnə test məhsul açarlarını təmizləmək
@@ -346,7 +347,9 @@ let activeTableId = null;
 let activeCategory = null; // null olduqda 2 sütunlu kvadrat kateqoriya kartları görünür
 let currentTeaPrice = 2.00; // Sadə Çay üçün + / - ilə tənzimlənən cari qiymət (default 2.00 ₼)
 let currentAppMode = "kafe"; // "kafe" və ya "pencere"
-let currentUserRole = resolveUserRoleFromUrlOrStorage(); // "admin" | "waiter1" | "waiter2"
+const initialRoleResolution = resolveUserRoleFromUrlOrStorage();
+let currentUserRole = initialRoleResolution.role; // "admin" | "waiter1" | "waiter2"
+let needsInitialRoleSelection = initialRoleResolution.needsSelection;
 
 // DOM Elementləri
 const mainScreen = document.getElementById("mainScreen");
@@ -504,15 +507,17 @@ function getTableSummary(table) {
   };
 }
 
-// Bildiriş göstərmək
+// Bildiriş göstərmək (Yalnız mühüm sistem hadisələri üçün, qısa və yığcam)
 function showToast(message) {
+  if (!toastContainer) return;
+  toastContainer.innerHTML = "";
   const toast = document.createElement("div");
   toast.className = "toast";
   toast.textContent = message;
   toastContainer.appendChild(toast);
   setTimeout(() => {
     toast.remove();
-  }, 2300);
+  }, 1300);
 }
 
 // Yuxarı Başlıqdakı Kassa Məbləğinin Yenilənməsi
@@ -603,7 +608,6 @@ function clearWindowCart() {
   state.windowCart = {};
   saveState();
   renderWindowScreen();
-  showToast("Pəncərə səbəti təmizləndi");
 }
 
 function checkoutWindowCart() {
@@ -627,7 +631,6 @@ function checkoutWindowCart() {
 
   renderWindowScreen();
   updateHeaderSales();
-  showToast(`Pəncərə satışı vuruldu: +${formatMoney(totalAmount)}`);
 }
 
 function renderWindowScreen() {
@@ -1159,7 +1162,6 @@ customItemForm.addEventListener("submit", (e) => {
   saveState();
   closeCustomItemModal();
   renderTableScreen();
-  showToast(`${name} (${formatMoney(price)}) əlavə olundu`);
 });
 
 // Hesabı bağlamaq (Ödənildi)
@@ -1242,9 +1244,7 @@ function closeActiveTableBill() {
   table.lastWaiter = null;
 
   saveState();
-  const closedTableName = table.name;
   closeTableScreen();
-  showToast(`${closedTableName} hesabı bağlandı (+${formatMoney(totalAmount)})`);
 }
 
 // 3. BAĞLANMIŞ ÇEKİN SİLİNMƏSİ (Test və ya səhv çekləri təmizləmək üçün — Yalnız Admin)
@@ -1292,7 +1292,6 @@ function deleteClosedBillById(billId) {
   state.closedBills.splice(billIdx, 1);
   saveState();
   refreshAllActiveViews();
-  showToast(`${bill.tableName} çeki silindi (-${formatMoney(billAmount)})`);
 }
 
 // Pəncərə satışından test məhsul qeydini silmək (Yalnız Admin)
@@ -1310,7 +1309,6 @@ function deleteWindowSoldItem(itemId) {
 
   saveState();
   refreshAllActiveViews();
-  showToast(`Pəncərə satışından "${item.name}" silindi (-${formatMoney(sumToDeduct)})`);
 }
 
 // 4. XƏRC ƏLAVƏETMƏ SİSTEMİ VƏ YENİ TEZ SEÇİMLƏR (Ofisiant və Admin üçün aktiv)
@@ -1368,7 +1366,6 @@ function deleteExpenseById(expenseId) {
   saveState();
   renderExpensesList();
   refreshAllActiveViews();
-  showToast(`"${target.title}" xərci silindi`);
 }
 
 function renderExpensesList() {
@@ -1445,7 +1442,6 @@ expenseForm.addEventListener("submit", (e) => {
     closeExpenseModal();
   }
   refreshAllActiveViews();
-  showToast(`${expenseType === "pencere" ? "Pəncərə" : "Kafe"} xərci qeyd olundu: ${formatNegativeMoney(amount)}`);
 });
 
 // Ofisiantlar üzrə bağlanmış masa və dövriyyə statistikasını hesablamaq
@@ -1888,7 +1884,6 @@ function deleteArchiveDayById(archiveId) {
   const updated = archive.filter((item) => item.id !== archiveId);
   saveArchive(updated);
   renderArchiveModal();
-  showToast(`"${target.fullDate || target.date}" günü arxivdən silindi`);
 }
 
 function renderArchiveModal() {
@@ -2067,7 +2062,6 @@ function applyTheme(theme) {
 function toggleTheme() {
   const nextTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
   applyTheme(nextTheme);
-  showToast(nextTheme === "dark" ? "Qaranlıq rejim aktivləşdirildi" : "İşıqlı rejim aktivləşdirildi");
 }
 
 function applyRolePermissions() {
@@ -2082,6 +2076,106 @@ function applyRolePermissions() {
   }
 
   refreshAllActiveViews();
+}
+
+// ============================================================================
+// 7B. iOS SAFARI PWA ÜÇÜN BİR DƏFƏLİK ROL SEÇİMİ VƏ 3 TOXUNUŞLA SIFIRLAMA
+// ============================================================================
+function ensureRoleSelectorModal() {
+  let modalEl = document.getElementById("roleSelectorModal");
+  if (!modalEl) {
+    modalEl = document.createElement("div");
+    modalEl.id = "roleSelectorModal";
+    modalEl.className = "modal-overlay confirm-overlay";
+    modalEl.setAttribute("aria-hidden", "true");
+    modalEl.innerHTML = `
+      <div class="role-selector-dialog">
+        <h3 class="role-selector-title">Bu cihazın rolu:</h3>
+        <div class="role-selector-options">
+          <button type="button" class="role-select-option-btn role-opt-admin" data-role="admin">
+            <span>👑</span>
+            <span>Müdir (Admin)</span>
+          </button>
+          <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter1">
+            <span>☕</span>
+            <span>1-ci Ofisiant</span>
+          </button>
+          <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter2">
+            <span>☕</span>
+            <span>2-ci Ofisiant</span>
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modalEl);
+  }
+
+  if (!modalEl.dataset.bound) {
+    modalEl.querySelectorAll(".role-select-option-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const chosenRole = btn.getAttribute("data-role") || "waiter1";
+        selectAndSaveDeviceRole(chosenRole);
+      });
+    });
+    modalEl.dataset.bound = "true";
+  }
+
+  return modalEl;
+}
+
+function openRoleSelectorModal() {
+  const modalEl = ensureRoleSelectorModal();
+  modalEl.classList.add("open");
+  modalEl.setAttribute("aria-hidden", "false");
+}
+
+function closeRoleSelectorModal() {
+  const modalEl = document.getElementById("roleSelectorModal");
+  if (!modalEl) return;
+  modalEl.classList.remove("open");
+  modalEl.setAttribute("aria-hidden", "true");
+}
+
+function selectAndSaveDeviceRole(role) {
+  const validRole = (role === "admin" || role === "waiter1" || role === "waiter2") ? role : "waiter1";
+  localStorage.setItem(ROLE_STORAGE_KEY, validRole);
+  currentUserRole = validRole;
+  needsInitialRoleSelection = false;
+  closeRoleSelectorModal();
+  applyRolePermissions();
+}
+
+// Yuxarıdakı "BabaBala" loqosuna ard-arda 3 dəfə toxunduqda (triple tap) rolu sıfırla və seçim pəncərəsini aç
+let logoTapCount = 0;
+let logoLastTapTime = 0;
+
+function initBrandLogoTripleTap() {
+  const logoEl = document.getElementById("brandLogoTitle") || document.querySelector(".brand-title");
+  if (!logoEl) return;
+
+  logoEl.style.cursor = "pointer";
+  logoEl.addEventListener("click", () => {
+    const now = Date.now();
+    if (now - logoLastTapTime < 550) {
+      logoTapCount += 1;
+    } else {
+      logoTapCount = 1;
+    }
+    logoLastTapTime = now;
+
+    if (logoTapCount >= 3) {
+      logoTapCount = 0;
+      localStorage.removeItem(ROLE_STORAGE_KEY);
+      if (window.location.search) {
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (err) {
+          // Ignore history replace error
+        }
+      }
+      openRoleSelectorModal();
+    }
+  });
 }
 
 // ============================================================================
@@ -2404,6 +2498,11 @@ if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
 // İLK YÜKLƏMƏ (BAŞLANĞIC)
 // ============================================================================
 applyTheme(getSavedTheme());
+ensureRoleSelectorModal();
+initBrandLogoTripleTap();
 applyRolePermissions();
 setAppMode("kafe");
+if (needsInitialRoleSelection) {
+  openRoleSelectorModal();
+}
 initFirebaseSync();

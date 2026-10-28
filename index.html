@@ -20,7 +20,7 @@
       <div class="header-utility-row">
         <div class="brand-block">
           <div class="brand-title-row">
-            <h1 class="brand-title">BabaBala</h1>
+            <h1 id="brandLogoTitle" class="brand-title">BabaBala</h1>
             <span id="syncStatusBtn" class="sync-status-pill sync-live" title="Canlı Sinxronizasiya Vəziyyəti">
               <span id="syncStatusDot" class="sync-dot"></span>
               <span id="syncStatusText">🟢 Canlı</span>
@@ -412,6 +412,27 @@
 
       <div class="modal-body report-scroll-body">
         <div id="archiveDaysList" class="archive-days-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: BİR DƏFƏLİK ROL SEÇİMİ (iOS PWA / İlk Açılış üçün Fallback Selector) -->
+  <div id="roleSelectorModal" class="modal-overlay confirm-overlay" aria-hidden="true">
+    <div class="role-selector-dialog">
+      <h3 class="role-selector-title">Bu cihazın rolu:</h3>
+      <div class="role-selector-options">
+        <button type="button" class="role-select-option-btn role-opt-admin" data-role="admin">
+          <span>👑</span>
+          <span>Müdir (Admin)</span>
+        </button>
+        <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter1">
+          <span>☕</span>
+          <span>1-ci Ofisiant</span>
+        </button>
+        <button type="button" class="role-select-option-btn role-opt-waiter" data-role="waiter2">
+          <span>☕</span>
+          <span>2-ci Ofisiant</span>
+        </button>
       </div>
     </div>
   </div>
