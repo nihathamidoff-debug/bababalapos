@@ -677,6 +677,12 @@ const menuSearchInput = document.getElementById("menuSearchInput");
 const clearMenuSearchBtn = document.getElementById("clearMenuSearchBtn");
 const activeTableNameEl = document.getElementById("activeTableName");
 const activeTableBadgeEl = document.getElementById("activeTableBadge");
+const waiterSelectedTableBannerEl = document.getElementById("waiterSelectedTableBanner");
+const waiterSelectedTableNameEl = document.getElementById("waiterSelectedTableName");
+const waiterChangeTableBtn = document.getElementById("waiterChangeTableBtn");
+const waiterDirectPayRow = document.getElementById("waiterDirectPayRow");
+const waiterPayCashDirectBtn = document.getElementById("waiterPayCashDirectBtn");
+const waiterPayCardDirectBtn = document.getElementById("waiterPayCardDirectBtn");
 const orderItemCountEl = document.getElementById("orderItemCount");
 const orderListEl = document.getElementById("orderList");
 const pinnedQuickGridEl = document.getElementById("pinnedQuickGrid");
@@ -1606,6 +1612,9 @@ function openTableScreen(tableId) {
       orders: { ...table.orders },
       customOrders: (table.customOrders || []).map((o) => ({ ...o }))
     };
+    if (waiterSelectedTableNameEl) {
+      waiterSelectedTableNameEl.textContent = `👉 SEÇİLDİ: ${table.name.toUpperCase()}`;
+    }
   } else {
     activeTableCommittedSnapshot = null;
   }
@@ -1659,32 +1668,28 @@ function updateTableActionButtonsState(table) {
 
   if (currentUserRole !== "admin") {
     // OFİSİANT "YAŞLI REJİMİ":
-    // 1. Ekranın ən aşağısında YALNIZ BİR DƏNƏ NƏHƏNG YAŞIL DÜYMƏ: "💾 SİFARİŞİ VUR (MASAYA YAZ)"
-    saveOrderBtn.textContent = "💾 SİFARİŞİ VUR (MASAYA YAZ)";
+    // 1. Ekranın ən aşağısında NƏHƏNG YAŞIL DÜYMƏ: "💾 SİFARİŞİ VUR (YADDA SAXLA)"
+    saveOrderBtn.textContent = "💾 SİFARİŞİ VUR (YADDA SAXLA)";
     saveOrderBtn.className = "save-order-btn btn-waiter-huge-submit";
     saveOrderBtn.disabled = false;
 
-    // 2. "💳 HESABI BAĞLA" düyməsi YALNIZ masa dolu olanda və ən küncdə fərqli rəngdə görünsün
-    if (totalAmount > 0) {
-      closeBillBtn.style.display = "flex";
-      closeBillBtn.textContent = `💳 HESABI BAĞLA (${formatMoney(totalAmount)})`;
-      closeBillBtn.className = "close-bill-btn btn-waiter-close-bill";
-      closeBillBtn.disabled = false;
-
-      if (headerCloseBillBtn) {
-        headerCloseBillBtn.style.display = "flex";
-        headerCloseBillBtn.textContent = `💳 Hesabı Bağla (${formatMoney(totalAmount)})`;
-      }
-    } else {
-      closeBillBtn.style.display = "none";
-      if (headerCloseBillBtn) {
-        headerCloseBillBtn.style.display = "none";
+    // 2. Birbaşa hesab alma düymələri: "💵 HESABI AL (NAĞD)" / "💳 KARTLA AL"
+    if (waiterDirectPayRow) {
+      if (totalAmount > 0) {
+        waiterDirectPayRow.style.display = "grid";
+      } else {
+        waiterDirectPayRow.style.display = "none";
       }
     }
+    if (closeBillBtn) closeBillBtn.style.display = "none";
+    if (headerCloseBillBtn) headerCloseBillBtn.style.display = "none";
     return;
   }
 
   // ADMİN REJİMİ:
+  if (waiterDirectPayRow) {
+    waiterDirectPayRow.style.display = "none";
+  }
   if (headerCloseBillBtn) {
     headerCloseBillBtn.style.display = "none";
   }
@@ -1864,16 +1869,16 @@ function renderPinnedQuickItems(table) {
   if (currentUserRole !== "admin") {
     pinnedQuickGridEl.className = "pinned-quick-grid waiter-kiosk-grid";
 
-    // Ofisiant Kiosk Rejimi: Yalnız ən çox gedən 8 əsas məhsul NƏHƏNG KARTLAR şəklində (+ və − ilə)
+    // Ofisiant Kiosk Rejimi: Yalnız ən çox gedən 8 əsas məhsul NƏHƏNG RƏNGLİ KARTLAR şəklində (+ və − ilə)
     const waiterQuickList = [
-      { id: "sade_cay_jek", title: "Sadə Çay (1 ₼)", defaultPrice: 1.00 },
-      { id: "sade_cay", title: "Armudu Çay (2 ₼)", defaultPrice: 2.00 },
-      { id: "suzme_pive_nzs_05", title: "Süzmə Pivə NZS", defaultPrice: 1.70 },
-      { id: "suzme_araq_100q", title: "Süzmə Araq 100qr", defaultPrice: 2.00 },
-      { id: "qend_limon", title: "Qənd / Limon", defaultPrice: 1.00 },
-      { id: "corek", title: "Çörək", defaultPrice: 0.50 },
-      { id: "peraski_kafe", title: "Peraşki", defaultPrice: 0.60 },
-      { id: "su_qazsiz_05", title: "Su 0.5l", defaultPrice: 0.50 }
+      { id: "sade_cay_jek", title: "☕ 1 MANATLIQ ÇAY", shortName: "1 M Çay", defaultPrice: 1.00, themeClass: "wqc-theme-tea-1" },
+      { id: "sade_cay", title: "🫖 2 MANATLIQ ÇAY", shortName: "2 M Çay", defaultPrice: 2.00, themeClass: "wqc-theme-tea-2" },
+      { id: "suzme_pive_nzs_05", title: "🍺 PİVƏ BAKAL", shortName: "Pivə Bakal", defaultPrice: 1.70, themeClass: "wqc-theme-beer" },
+      { id: "suzme_araq_100q", title: "🥃 100 QRAM ARAQ", shortName: "100qr Araq", defaultPrice: 2.00, themeClass: "wqc-theme-vodka" },
+      { id: "corek", title: "🍞 ÇÖRƏK", shortName: "Çörək", defaultPrice: 0.50, themeClass: "wqc-theme-bread" },
+      { id: "qend_limon", title: "🍋 QƏND / LİMON", shortName: "Qənd / Limon", defaultPrice: 1.00, themeClass: "wqc-theme-lemon" },
+      { id: "peraski_kafe", title: "🥟 PERAŞKİ", shortName: "Peraşki", defaultPrice: 0.60, themeClass: "wqc-theme-peraski" },
+      { id: "su_qazsiz_05", title: "💧 SU 0.5L", shortName: "Su 0.5L", defaultPrice: 0.50, themeClass: "wqc-theme-water" }
     ];
 
     waiterQuickList.forEach((def) => {
@@ -1884,18 +1889,25 @@ function renderPinnedQuickItems(table) {
         unit: "ədəd"
       };
       const qty = Number(table.orders[item.id]) || 0;
+      const lineTotal = round2(qty * item.price);
 
       const card = document.createElement("div");
-      card.className = `waiter-quick-card ${qty > 0 ? "has-qty" : ""}`;
+      card.className = `waiter-quick-card ${def.themeClass} ${qty > 0 ? "has-qty" : ""}`;
       card.innerHTML = `
-        <div class="wqc-info">
+        <div class="wqc-card-header">
           <span class="wqc-title">${def.title}</span>
           <span class="wqc-price">${formatMoney(item.price)}</span>
         </div>
-        <div class="wqc-controls">
+        <div class="wqc-stepper-row">
           <button type="button" class="wqc-btn wqc-btn-minus ${qty === 0 ? "disabled" : ""}" aria-label="Azalt">−</button>
-          <span class="wqc-qty-val">${qty}</span>
+          <div class="wqc-qty-badge">
+            <span class="wqc-qty-num">${qty}</span>
+            <span class="wqc-qty-unit">ƏDƏD</span>
+          </div>
           <button type="button" class="wqc-btn wqc-btn-plus" aria-label="Artır">+</button>
+        </div>
+        <div class="wqc-live-total ${qty > 0 ? "show" : ""}">
+          ${qty > 0 ? `👉 ${qty} ƏDƏD ${def.shortName.toUpperCase()} = ${formatMoney(lineTotal)}` : `+ Toxunaraq əlavə et`}
         </div>
       `;
 
@@ -1910,7 +1922,7 @@ function renderPinnedQuickItems(table) {
       });
 
       card.addEventListener("click", (e) => {
-        if (e.target.closest(".wqc-btn-minus")) return;
+        if (e.target.closest(".wqc-btn-minus") || e.target.closest(".wqc-btn-plus")) return;
         updateTableItemQty(table.id, item.id, 1);
       });
 
@@ -2103,6 +2115,9 @@ function renderTableScreen() {
   activeTableNameEl.textContent = table.name;
   activeTableBadgeEl.textContent = isBusy ? "Dolu" : "Boş";
   activeTableBadgeEl.className = `table-badge ${isBusy ? "badge-busy" : "badge-empty"}`;
+  if (waiterSelectedTableNameEl) {
+    waiterSelectedTableNameEl.textContent = `👉 SEÇİLDİ: ${table.name.toUpperCase()}`;
+  }
   orderItemCountEl.textContent = `${totalCount} məhsul`;
   activeTableTotalEl.textContent = formatMoney(totalAmount);
   updateTableActionButtonsState(table);
@@ -2115,10 +2130,65 @@ function renderTableScreen() {
   if (orderedCatalogItems.length === 0 && customOrders.length === 0) {
     orderListEl.innerHTML = `
       <div class="empty-order-box">
-        Bu masada aktiv sifariş yoxdur. Tez seçim və ya kateqoriyalardan məhsul əlavə edin.
+        ${currentUserRole !== "admin" ? "Səbət boşdur. Yuxarıdakı məhsul kartlarına toxunaraq sifariş yığın." : "Bu masada aktiv sifariş yoxdur. Tez seçim və ya kateqoriyalardan məhsul əlavə edin."}
       </div>
     `;
+  } else if (currentUserRole !== "admin") {
+    // OFİSİANT ÜÇÜN SADƏLƏŞDİRİLMİŞ SƏBƏT SİYAHISI (* 3x Pivə Bakal (5.10 ₼))
+    const listWrap = document.createElement("div");
+    listWrap.className = "waiter-simple-order-list";
+
+    orderedCatalogItems.forEach((item) => {
+      const qty = Number(table.orders[item.id]) || 0;
+      const lineTotal = round2(qty * item.price);
+
+      const row = document.createElement("div");
+      row.className = "waiter-simple-order-row";
+      row.innerHTML = `
+        <div class="wsor-left">
+          <span class="wsor-bullet">•</span>
+          <strong class="wsor-qty">${qty}x</strong>
+          <span class="wsor-name">${item.name}</span>
+          <span class="wsor-price">(${formatMoney(lineTotal)})</span>
+        </div>
+        <div class="wsor-controls">
+          <button type="button" class="wsor-btn wsor-btn-minus" aria-label="Azalt">−</button>
+          <button type="button" class="wsor-btn wsor-btn-plus" aria-label="Artır">+</button>
+        </div>
+      `;
+
+      row.querySelector(".wsor-btn-minus").addEventListener("click", () => updateTableItemQty(table.id, item.id, -1));
+      row.querySelector(".wsor-btn-plus").addEventListener("click", () => updateTableItemQty(table.id, item.id, 1));
+      listWrap.appendChild(row);
+    });
+
+    customOrders.forEach((custom) => {
+      const qty = Number(custom.qty) || 0;
+      const lineTotal = round2(qty * custom.price);
+
+      const row = document.createElement("div");
+      row.className = "waiter-simple-order-row";
+      row.innerHTML = `
+        <div class="wsor-left">
+          <span class="wsor-bullet">•</span>
+          <strong class="wsor-qty">${qty}x</strong>
+          <span class="wsor-name">${custom.name}</span>
+          <span class="wsor-price">(${formatMoney(lineTotal)})</span>
+        </div>
+        <div class="wsor-controls">
+          <button type="button" class="wsor-btn wsor-btn-minus" aria-label="Azalt">−</button>
+          <button type="button" class="wsor-btn wsor-btn-plus" aria-label="Artır">+</button>
+        </div>
+      `;
+
+      row.querySelector(".wsor-btn-minus").addEventListener("click", () => updateCustomItemQty(table.id, custom.id, -1));
+      row.querySelector(".wsor-btn-plus").addEventListener("click", () => updateCustomItemQty(table.id, custom.id, 1));
+      listWrap.appendChild(row);
+    });
+
+    orderListEl.appendChild(listWrap);
   } else {
+    // Admin rejimi: standart order list
     orderedCatalogItems.forEach((item) => {
       const qty = Number(table.orders[item.id]) || 0;
       const lineTotal = round2(qty * item.price);
@@ -2612,7 +2682,11 @@ function confirmCloseActiveTableBill() {
   });
 
   const payText = selectedTablePayMethod === "card" ? "💳 Kartla" : "💵 Nağd";
-  showToast(`${table.name} hesabı bağlandı (${payText}: ${formatMoney(totalAmount)})`);
+  if (currentUserRole !== "admin") {
+    showToast(`✅ ${table.name} - Hesab bağlandı! (${payText})`);
+  } else {
+    showToast(`${table.name} hesabı bağlandı (${payText}: ${formatMoney(totalAmount)})`);
+  }
 }
 
 // ============================================================================
@@ -6083,6 +6157,41 @@ if (confirmCloseBillWithMethodBtn) {
 if (paymentMethodModal) {
   paymentMethodModal.addEventListener("click", (e) => {
     if (e.target === paymentMethodModal) closePaymentMethodModal();
+  });
+}
+
+// Ofisiant Kiosk Rejimi: Masadan Çıx / Dəyiş və Birbaşa Hesab Alma (Nağd / Kart)
+if (waiterChangeTableBtn) {
+  waiterChangeTableBtn.addEventListener("click", () => {
+    closeTableScreen(true);
+  });
+}
+
+if (waiterPayCashDirectBtn) {
+  waiterPayCashDirectBtn.addEventListener("click", () => {
+    const table = state.tables.find((t) => t.id === activeTableId);
+    if (!table) return;
+    const { totalAmount } = getTableSummary(table);
+    if (totalAmount <= 0) {
+      showToast("⚠️ Səbət boşdur!");
+      return;
+    }
+    setTablePaymentMethod("cash");
+    confirmCloseActiveTableBill();
+  });
+}
+
+if (waiterPayCardDirectBtn) {
+  waiterPayCardDirectBtn.addEventListener("click", () => {
+    const table = state.tables.find((t) => t.id === activeTableId);
+    if (!table) return;
+    const { totalAmount } = getTableSummary(table);
+    if (totalAmount <= 0) {
+      showToast("⚠️ Səbət boşdur!");
+      return;
+    }
+    setTablePaymentMethod("card");
+    confirmCloseActiveTableBill();
   });
 }
 

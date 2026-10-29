@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="BabaBala">
   <meta name="theme-color" content="#0f172a">
   <title>BabaBala — Kassa və Masa İdarəetməsi</title>
-  <link rel="manifest" href="manifest.json?v=6">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="manifest" href="manifest.json?v=12">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -158,6 +158,16 @@
 
   <!-- EKRAN 2: MASA SİFARİŞİ VƏ HESAB PANELİ -->
   <div id="tableScreen" class="screen" aria-hidden="true">
+    <!-- OFİSİANT ÜÇÜN NƏHƏNG SEÇİLMİŞ MASA XƏBƏRDARLIĞI VƏ ÇIXIŞ BANNERİ -->
+    <div id="waiterSelectedTableBanner" class="waiter-table-alert-banner waiter-only-el">
+      <div class="waiter-banner-text-wrap">
+        <span id="waiterSelectedTableName" class="waiter-banner-table-name">👉 SEÇİLDİ: MASA 1</span>
+      </div>
+      <button type="button" id="waiterChangeTableBtn" class="waiter-exit-table-btn">
+        ❌ ÇIX / DƏYİŞ
+      </button>
+    </div>
+
     <header class="panel-header">
       <button type="button" id="backToMainBtn" class="back-btn">
         <span class="back-arrow">‹</span> Geri
@@ -237,9 +247,18 @@
         <button type="button" id="saveOrderBtn" class="save-order-btn">
           💾 SİFARİŞİ TƏSDİQLƏ (MASAYA YAZ)
         </button>
-        <button type="button" id="closeBillBtn" class="close-bill-btn secondary-close-btn">
+        <button type="button" id="closeBillBtn" class="close-bill-btn secondary-close-btn admin-only-el">
           💳 HESABI BAĞLA (ÖDƏNİLDİ)
         </button>
+        <!-- Ofisiant üçün Birbaşa Hesab Alma Düymələri (Nağd və Kart) -->
+        <div id="waiterDirectPayRow" class="waiter-direct-pay-row waiter-only-el" style="display: none;">
+          <button type="button" id="waiterPayCashDirectBtn" class="btn-waiter-pay-direct pay-direct-cash">
+            💵 HESABI AL (NAĞD)
+          </button>
+          <button type="button" id="waiterPayCardDirectBtn" class="btn-waiter-pay-direct pay-direct-card">
+            💳 KARTLA AL
+          </button>
+        </div>
       </div>
     </footer>
   </div>
@@ -809,6 +828,6 @@
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
