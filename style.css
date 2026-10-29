@@ -1429,13 +1429,50 @@ input {
   gap: 10px;
 }
 
+.window-cart-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.window-cart-btn-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+}
+
+.btn-window-confirm {
+  min-height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.96rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(22, 163, 74, 0.28);
+  transition: transform 0.08s ease, background-color 0.1s ease;
+}
+
+.btn-window-confirm:active {
+  transform: scale(0.97);
+  background: #15803d;
+}
+
+.btn-window-confirm:disabled {
+  background: #cbd5e1;
+  color: #64748b;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .btn-window-clear {
-  min-height: 52px;
-  border-radius: 14px;
+  min-height: 38px;
+  border-radius: 10px;
   border: 1.5px solid #fecaca;
   background: #fef2f2;
   color: #dc2626;
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   font-weight: 800;
   cursor: pointer;
   transition: transform 0.08s ease;
@@ -1447,21 +1484,21 @@ input {
 }
 
 .btn-window-checkout {
-  min-height: 52px;
-  border-radius: 14px;
+  min-height: 48px;
+  border-radius: 12px;
   border: none;
-  background: var(--primary);
+  background: #2563eb;
   color: #ffffff;
-  font-size: 1.1rem;
-  font-weight: 900;
+  font-size: 0.94rem;
+  font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.28);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
   transition: transform 0.08s ease, background-color 0.1s ease;
 }
 
 .btn-window-checkout:active {
   transform: scale(0.97);
-  background: var(--primary-active);
+  background: #1d4ed8;
 }
 
 .btn-window-checkout:disabled {
@@ -1469,6 +1506,122 @@ input {
   color: #64748b;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+/* Pəncərə Gözləyən Sifarişlər Bölməsi */
+.window-pending-section {
+  background: var(--bg-surface);
+  border: 1.5px solid #3b82f6;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 14px;
+  box-shadow: 0 3px 12px rgba(59, 130, 246, 0.08);
+}
+
+.window-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.window-order-card {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.win-order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.win-order-amount {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.win-order-items-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.win-order-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.win-order-pay-btn {
+  flex: 1;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
+  transition: transform 0.08s ease, background-color 0.1s ease;
+}
+
+.win-order-pay-btn:active {
+  transform: scale(0.97);
+  background: #15803d;
+}
+
+.win-order-cancel-btn {
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.win-order-cancel-btn:active {
+  background: #fee2e2;
+}
+
+/* Pəncərə Kateqoriya Tabları */
+.window-category-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.window-cat-tab {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.window-cat-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
 }
 
 .window-menu-section {
@@ -3229,6 +3382,21 @@ body.dark-mode .btn-add-archive-expense {
 .report-accordion-content {
   padding: 12px 14px 14px;
   border-top: 1px solid var(--border-color);
+}
+
+.report-sub-fin-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-hover);
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-secondary);
 }
 
 /* ============================================================================

@@ -83,6 +83,15 @@
 
       <!-- 2. PƏNCƏRƏ SATIŞI REJİMİ (Ayaqüstü / Al-Apar) -->
       <div id="windowView" class="mode-view" style="display: none;">
+        <!-- Gözləyən Pəncərə Sifarişləri -->
+        <section id="windowPendingOrdersSection" class="window-pending-section" style="display: none;">
+          <div class="subsection-header">
+            <h3 class="subsection-title">⏳ Gözləyən Sifarişlər</h3>
+            <span id="windowPendingCountBadge" class="item-count-pill">0 sifariş</span>
+          </div>
+          <div id="windowPendingOrdersList" class="window-pending-list"></div>
+        </section>
+
         <!-- Cari Səbət / Sifariş siyahısı -->
         <section class="window-cart-section">
           <div class="subsection-header">
@@ -105,17 +114,29 @@
               </button>
             </div>
             <div class="window-cart-actions">
+              <div class="window-cart-btn-row">
+                <button type="button" id="windowConfirmOrderBtn" class="btn-window-confirm" disabled>
+                  💾 SİFARİŞİ TƏSDİQLƏ
+                </button>
+                <button type="button" id="windowCheckoutBtn" class="btn-window-checkout" disabled>
+                  ⚡ Dərhal Ödəndi
+                </button>
+              </div>
               <button type="button" id="windowClearCartBtn" class="btn-window-clear">Təmizlə</button>
-              <button type="button" id="windowCheckoutBtn" class="btn-window-checkout" disabled>Ödənildi / Vur</button>
             </div>
           </div>
         </section>
 
-        <!-- Pəncərə Menyusu (İri Düymələr) -->
+        <!-- Pəncərə Menyusu (Kateqoriya Tabları və İri Düymələr) -->
         <section class="window-menu-section">
           <div class="subsection-header">
             <h3 class="subsection-title">Pəncərə Menyusu</h3>
             <span class="subsection-hint">Toxunaraq səbətə əlavə et</span>
+          </div>
+          <div class="window-category-tabs">
+            <button type="button" class="window-cat-tab active" data-cat="all">Hamısı</button>
+            <button type="button" class="window-cat-tab" data-cat="peraski">🥟 Dürmək &amp; Peraşki</button>
+            <button type="button" class="window-cat-tab" data-cat="soyuq_ickiler">🥤 Soyuq İçkilər</button>
           </div>
           <div id="windowMenuGrid" class="quick-menu-grid"></div>
         </section>
@@ -351,9 +372,57 @@
           <strong id="reportOpenTablesAmount">0.00 ₼</strong>
         </div>
 
-        <!-- 4 ƏDƏD AÇILIB-BAĞLANAN (ACCORDION) HESABAT BLOKU — HAMISI BAĞLI AÇILIR -->
+        <!-- 5 ƏDƏD AÇILIB-BAĞLANAN (ACCORDION) HESABAT BLOKU — HAMISI BAĞLI AÇILIR -->
 
-        <!-- 1. ▾ OFİSİANTLAR ÜZRƏ DÖVRİYYƏ -->
+        <!-- 1. ▾ KAFE KASSASI (Əvvəlki kimi tam detallı: Çeklər [redaktə/sil], Satılanlar, Xərclər) -->
+        <div class="report-accordion-card" id="accCafeCard">
+          <button type="button" class="report-accordion-header" id="accCafeHeader" aria-expanded="false">
+            <div class="report-acc-title-wrap">
+              <span class="report-acc-arrow">▸</span>
+              <h4>☕ Kafe Kassası</h4>
+            </div>
+            <span id="reportCafeNetBadge" class="report-acc-badge">Xalis: 0.00 ₼</span>
+          </button>
+          <div class="report-accordion-content" id="accCafeContent" style="display: none;">
+            <div class="report-sub-fin-bar">
+              <span>Satış: <strong id="reportCafeSales">0.00 ₼</strong></span>
+              <span>Xərc: <strong id="reportCafeExpenses" style="color:#ef4444">-0.00 ₼</strong></span>
+              <span>Xalis: <strong id="reportCafeNetCash" style="color:#16a34a">0.00 ₼</strong></span>
+            </div>
+            <h5 class="mini-title" style="margin-top: 10px;">🍽 Kafe Masaları Üzrə Bağlanmış Hesablar</h5>
+            <div id="reportTableBillsList" class="mini-list"></div>
+            <h5 class="mini-title" style="margin-top: 14px;">📦 Kafe Satılan Məhsullar (İnventar)</h5>
+            <div id="reportSoldItems" class="mini-list"></div>
+            <h5 class="mini-title" style="margin-top: 14px;">💸 Kafe Xərcləri</h5>
+            <div id="reportCafeExpensesList" class="mini-list"></div>
+          </div>
+        </div>
+
+        <!-- 2. ▾ PƏNCƏRƏ KASSASI (Əvvəlki kimi tam detallı: Çeklər [redaktə/sil], Satılanlar, Xərclər) -->
+        <div class="report-accordion-card" id="accWindowCard">
+          <button type="button" class="report-accordion-header" id="accWindowHeader" aria-expanded="false">
+            <div class="report-acc-title-wrap">
+              <span class="report-acc-arrow">▸</span>
+              <h4>🪟 Pəncərə Kassası</h4>
+            </div>
+            <span id="reportWindowNetBadge" class="report-acc-badge">Xalis: 0.00 ₼</span>
+          </button>
+          <div class="report-accordion-content" id="accWindowContent" style="display: none;">
+            <div class="report-sub-fin-bar">
+              <span>Satış: <strong id="reportWindowSales">0.00 ₼</strong></span>
+              <span>Xərc: <strong id="reportWindowExpenses" style="color:#ef4444">-0.00 ₼</strong></span>
+              <span>Xalis: <strong id="reportWindowNetCash" style="color:#16a34a">0.00 ₼</strong></span>
+            </div>
+            <h5 class="mini-title" style="margin-top: 10px;">🧾 Pəncərə Çekləri</h5>
+            <div id="reportWindowTransactionsList" class="mini-list"></div>
+            <h5 class="mini-title" style="margin-top: 14px;">🥟 Pəncərə Satılan Məhsullar (İnventar)</h5>
+            <div id="reportWindowSoldItems" class="mini-list"></div>
+            <h5 class="mini-title" style="margin-top: 14px;">💸 Pəncərə Xərcləri</h5>
+            <div id="reportWindowExpensesList" class="mini-list"></div>
+          </div>
+        </div>
+
+        <!-- 3. ▾ OFİSİANTLAR ÜZRƏ DÖVRİYYƏ -->
         <div class="report-accordion-card" id="accWaiterCard">
           <button type="button" class="report-accordion-header" id="accWaiterHeader" aria-expanded="false">
             <div class="report-acc-title-wrap">
@@ -367,7 +436,7 @@
           </div>
         </div>
 
-        <!-- 2. ▾ MASALAR ÜZRƏ HESABAT (Hansı masaya nə satıldı?) -->
+        <!-- 4. ▾ MASALAR ÜZRƏ HESABAT (Hansı masaya nə satıldı?) -->
         <div class="report-accordion-card" id="accTableStatsCard">
           <button type="button" class="report-accordion-header" id="accTableStatsHeader" aria-expanded="false">
             <div class="report-acc-title-wrap">
@@ -381,42 +450,17 @@
           </div>
         </div>
 
-        <!-- 3. ▾ SATILAN MƏHSULLAR (Nələr satıldı?) -->
-        <div class="report-accordion-card" id="accSoldItemsCard">
-          <button type="button" class="report-accordion-header" id="accSoldItemsHeader" aria-expanded="false">
+        <!-- 5. ▾ ATM NAĞDLAŞDIRMA LOGU -->
+        <div class="report-accordion-card" id="accAtmCard">
+          <button type="button" class="report-accordion-header" id="accAtmHeader" aria-expanded="false">
             <div class="report-acc-title-wrap">
               <span class="report-acc-arrow">▸</span>
-              <h4>🍽 Satılan Məhsullar (Nələr satıldı?)</h4>
+              <h4>🏧 ATM Nağdlaşdırma Logu</h4>
             </div>
-            <span id="accSoldItemsBadge" class="report-acc-badge">0 çeşid</span>
+            <span id="accAtmBadge" class="report-acc-badge">0 çıxarış</span>
           </button>
-          <div class="report-accordion-content" id="accSoldItemsContent" style="display: none;">
-            <div id="reportAllSoldItemsList" class="compact-stats-list"></div>
-          </div>
-        </div>
-
-        <!-- 4. ▾ KASSA BÖLGÜSÜ, XƏRCLƏR VƏ ATM ÇIXARIŞI -->
-        <div class="report-accordion-card" id="accExpensesCard">
-          <button type="button" class="report-accordion-header" id="accExpensesHeader" aria-expanded="false">
-            <div class="report-acc-title-wrap">
-              <span class="report-acc-arrow">▸</span>
-              <h4>💸 Kassa Bölgüsü, Xərclər və 🏧 ATM</h4>
-            </div>
-            <span id="accExpensesBadge" class="report-acc-badge">-0.00 ₼</span>
-          </button>
-          <div class="report-accordion-content" id="accExpensesContent" style="display: none;">
-            <div id="reportAtmSection" class="report-section" style="display: none;">
-              <h5 class="mini-title">🏧 ATM Nağdlaşdırma Logu (Kart ➔ Nağd)</h5>
-              <div id="reportAtmTransfersList" class="mini-list"></div>
-            </div>
-            <div class="report-section">
-              <h5 class="mini-title">🍽 Kafe Xərcləri</h5>
-              <div id="reportCafeExpensesList" class="mini-list"></div>
-            </div>
-            <div class="report-section">
-              <h5 class="mini-title">🪟 Pəncərə Xərcləri</h5>
-              <div id="reportWindowExpensesList" class="mini-list"></div>
-            </div>
+          <div class="report-accordion-content" id="accAtmContent" style="display: none;">
+            <div id="reportAtmTransfersList" class="mini-list"></div>
           </div>
         </div>
 
@@ -446,7 +490,7 @@
       <p id="dangerConfirmText" class="confirm-text">
         Bu əməliyyatı təsdiqləmək üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:
       </p>
-      <div class="danger-input-wrap">
+      <div class="danger-input-wrap" id="dangerInputWrap">
         <input type="text" id="dangerConfirmInput" class="danger-confirm-input" placeholder="SİL" autocomplete="off" autocapitalize="characters" maxlength="10">
       </div>
       <div class="confirm-actions">
@@ -756,6 +800,6 @@
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

@@ -137,11 +137,22 @@ const MENU_CATALOG = [
 
 // "BabaBala" Pəncərə Satışı (Ayaqüstü / Al-Apar) Menyu Məlumat Bazası
 const WINDOW_MENU_CATALOG = [
-  { id: "win_durmek_et", name: "Ətli qızarmış dürmək", price: 0.60, unit: "ədəd" },
-  { id: "win_durmek_sosis", name: "Sosisli qızarmış dürmək", price: 0.50, unit: "ədəd" },
-  { id: "win_peraski_boyuk", name: "Böyük peraşki", price: 0.50, unit: "ədəd" },
-  { id: "win_peraski_kicik", name: "Kiçik Peraşki", price: 0.30, unit: "ədəd" },
-  { id: "win_peraski_mini", name: "Mini peraşki", price: 0.25, unit: "ədəd" }
+  // --- DÜRMƏK & PERAŞKİ ---
+  { id: "win_durmek_et", name: "Ətli qızarmış dürmək", price: 0.60, category: "peraski", unit: "ədəd" },
+  { id: "win_durmek_sosis", name: "Sosisli qızarmış dürmək", price: 0.50, category: "peraski", unit: "ədəd" },
+  { id: "win_peraski_boyuk", name: "Böyük peraşki", price: 0.50, category: "peraski", unit: "ədəd" },
+  { id: "win_peraski_kicik", name: "Kiçik Peraşki", price: 0.30, category: "peraski", unit: "ədəd" },
+  { id: "win_peraski_mini", name: "Mini peraşki", price: 0.25, category: "peraski", unit: "ədəd" },
+
+  // --- SOYUQ İÇKİLƏR (Kafedə olduğu kimi) ---
+  { id: "su_qazsiz_05", name: "Su 0.5l", price: 0.50, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "cola_fanta_033", name: "Cola / Fanta 0.33l", price: 1.00, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "cola_fanta_05", name: "Cola / Fanta 0.5l", price: 2.00, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "cola_fanta_1l", name: "Cola / Fanta 1l", price: 3.00, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "duses_terxun_05", name: "Düşes / Tərxun 0.5l", price: 2.00, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "sirab_1l", name: "Sirab 1l", price: 2.00, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "ayran_stekan", name: "Ayran (Stəkan)", price: 1.00, category: "soyuq_ickiler", unit: "ədəd" },
+  { id: "ayran_bakal", name: "Ayran (Bakal)", price: 2.00, category: "soyuq_ickiler", unit: "ədəd" }
 ];
 
 const VALID_ITEM_IDS = new Set(MENU_CATALOG.map((item) => item.id));
@@ -387,7 +398,8 @@ function createDefaultState() {
     // Pəncərə Satışı:
     windowSalesTotal: 0,
     windowSoldSummary: {},
-    windowCart: {}
+    windowCart: {},
+    windowOrders: []
   };
 }
 
@@ -560,7 +572,10 @@ function normalizeStateObject(parsed) {
     windowSoldSummary: {},
     windowCart: (parsed.windowCart && typeof parsed.windowCart === "object")
       ? parsed.windowCart
-      : {}
+      : {},
+    windowOrders: Array.isArray(parsed.windowOrders)
+      ? parsed.windowOrders.filter((o) => o && !o.deleted)
+      : []
   };
 
   recalculateShiftTotalsFromLedger(normalizedState);
@@ -647,8 +662,14 @@ const windowCartTotalEl = document.getElementById("windowCartTotal");
 const windowPayCashBtn = document.getElementById("windowPayCashBtn");
 const windowPayCardBtn = document.getElementById("windowPayCardBtn");
 const windowClearCartBtn = document.getElementById("windowClearCartBtn");
+const windowConfirmOrderBtn = document.getElementById("windowConfirmOrderBtn");
 const windowCheckoutBtn = document.getElementById("windowCheckoutBtn");
 const windowMenuGridEl = document.getElementById("windowMenuGrid");
+const windowCategoryTabsEl = document.getElementById("windowCategoryTabs");
+const windowPendingOrdersSection = document.getElementById("windowPendingOrdersSection");
+const windowPendingOrdersList = document.getElementById("windowPendingOrdersList");
+const windowPendingCountBadge = document.getElementById("windowPendingCountBadge");
+let currentWindowCategory = "all";
 
 const backToMainBtn = document.getElementById("backToMainBtn");
 const openTransferTableBtn = document.getElementById("openTransferTableBtn");
@@ -831,6 +852,14 @@ const cancelQuickAtmBtn = document.getElementById("cancelQuickAtmBtn");
 const confirmQuickAtmBtn = document.getElementById("confirmQuickAtmBtn");
 
 // Hesabat Accordion Elementləri
+const accCafeCard = document.getElementById("accCafeCard");
+const accCafeHeader = document.getElementById("accCafeHeader");
+const accCafeContent = document.getElementById("accCafeContent");
+
+const accWindowCard = document.getElementById("accWindowCard");
+const accWindowHeader = document.getElementById("accWindowHeader");
+const accWindowContent = document.getElementById("accWindowContent");
+
 const accWaiterCard = document.getElementById("accWaiterCard");
 const accWaiterHeader = document.getElementById("accWaiterHeader");
 const accWaiterContent = document.getElementById("accWaiterContent");
@@ -841,6 +870,12 @@ const accTableStatsHeader = document.getElementById("accTableStatsHeader");
 const accTableStatsContent = document.getElementById("accTableStatsContent");
 const accTableStatsBadge = document.getElementById("accTableStatsBadge");
 
+const accAtmCard = document.getElementById("accAtmCard");
+const accAtmHeader = document.getElementById("accAtmHeader");
+const accAtmContent = document.getElementById("accAtmContent");
+const accAtmBadge = document.getElementById("accAtmBadge");
+
+// Əvvəlki elementlər üçün fallback referanslar:
 const accSoldItemsCard = document.getElementById("accSoldItemsCard");
 const accSoldItemsHeader = document.getElementById("accSoldItemsHeader");
 const accSoldItemsContent = document.getElementById("accSoldItemsContent");
@@ -851,6 +886,12 @@ const accExpensesCard = document.getElementById("accExpensesCard");
 const accExpensesHeader = document.getElementById("accExpensesHeader");
 const accExpensesContent = document.getElementById("accExpensesContent");
 const accExpensesBadge = document.getElementById("accExpensesBadge");
+
+const reportCafeNetCashEl = document.getElementById("reportCafeNetCash");
+const reportWindowNetCashEl = document.getElementById("reportWindowNetCash");
+const dangerInputWrap = document.getElementById("dangerInputWrap");
+
+let pendingPaymentContext = null; // { type: "table" | "window_order" | "window_instant", orderId, tableId }
 
 let editingExpenseContext = null; // { expenseId, archiveDayId, isNew }
 let selectedWindowPayMethod = "cash"; // Pəncərə satışı üçün default: 💵 Nağd
@@ -1075,7 +1116,214 @@ function clearWindowCart() {
   renderWindowScreen();
 }
 
-function checkoutWindowCart() {
+// Pəncərə Sifarişini Təsdiqlə (Gözləyən Sifarişlər Siyahısına Yaz)
+function confirmWindowOrder() {
+  const { totalAmount, totalCount } = getWindowCartSummary();
+  if (totalAmount <= 0) {
+    showToast("⚠️ Səbət boşdur!");
+    return;
+  }
+
+  const billItems = [];
+  for (const item of WINDOW_MENU_CATALOG) {
+    const qty = Number(state.windowCart[item.id]) || 0;
+    if (qty > 0) {
+      billItems.push({
+        itemId: item.id,
+        name: item.name,
+        qty,
+        price: item.price,
+        unit: item.unit,
+        total: round2(qty * item.price),
+        isCustom: false
+      });
+    }
+  }
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const orderNum = (state.windowOrders || []).length + 1;
+
+  const orderRecord = {
+    id: `win_ord_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    orderNumber: orderNum,
+    time: timeStr,
+    date: getBusinessDateKey(now),
+    dateTimeLabel: getShortDateTimeAz(now),
+    items: billItems,
+    total: round2(totalAmount),
+    totalAmount: round2(totalAmount),
+    createdByRole: currentUserRole,
+    createdAt: Date.now()
+  };
+
+  if (!Array.isArray(state.windowOrders)) {
+    state.windowOrders = [];
+  }
+  state.windowOrders.push(orderRecord);
+  state.windowCart = {};
+
+  saveState({ syncWindowCart: true, syncWindowOrders: true });
+
+  logAuditEvent({
+    type: "order",
+    typeLabel: "Pəncərə Sifarişi Təsdiqləndi",
+    tableName: `Pəncərə (#${orderNum})`,
+    tableId: "pencere",
+    amount: round2(totalAmount),
+    details: billItems.map((it) => `${it.name} × ${it.qty}`).join(", "),
+    actorRole: currentUserRole
+  });
+
+  showToast(`Pəncərə sifarişi #${orderNum} təsdiqləndi! (${formatMoney(totalAmount)})`);
+  renderWindowScreen();
+}
+
+// Gözləyən Pəncərə Sifarişlərini Ekranda Göstər
+function renderWindowPendingOrders() {
+  if (!windowPendingOrdersSection || !windowPendingOrdersList) return;
+
+  const pending = Array.isArray(state.windowOrders) ? state.windowOrders.filter((o) => o && !o.deleted) : [];
+
+  if (windowPendingCountBadge) {
+    windowPendingCountBadge.textContent = `${pending.length} sifariş`;
+  }
+
+  if (pending.length === 0) {
+    windowPendingOrdersSection.style.display = "none";
+    windowPendingOrdersList.innerHTML = "";
+    return;
+  }
+
+  windowPendingOrdersSection.style.display = "block";
+  windowPendingOrdersList.innerHTML = "";
+
+  pending.forEach((ord, idx) => {
+    const card = document.createElement("div");
+    card.className = "window-order-card";
+
+    const itemsSummary = (ord.items || []).map((it) => `${it.name} × ${it.qty}`).join(", ");
+    const numDisplay = ord.orderNumber ? `#${ord.orderNumber}` : `#${idx + 1}`;
+
+    card.innerHTML = `
+      <div class="win-order-card-header">
+        <span class="win-order-title">🥟 Sifariş ${numDisplay} (${ord.time})</span>
+        <span class="win-order-amount">${formatMoney(ord.total || ord.totalAmount || 0)}</span>
+      </div>
+      <div class="win-order-items-text">${itemsSummary || "Məhsul yoxdur"}</div>
+      <div class="win-order-actions">
+        <button type="button" class="win-order-cancel-btn" title="Sifarişi ləğv et">✕ Sil</button>
+        <button type="button" class="win-order-pay-btn">💳 ÖDƏNİLDİ</button>
+      </div>
+    `;
+
+    card.querySelector(".win-order-pay-btn").addEventListener("click", () => {
+      openPayWindowOrderModal(ord.id);
+    });
+
+    card.querySelector(".win-order-cancel-btn").addEventListener("click", () => {
+      cancelWindowOrder(ord.id);
+    });
+
+    windowPendingOrdersList.appendChild(card);
+  });
+}
+
+function openPayWindowOrderModal(orderId) {
+  const ord = (state.windowOrders || []).find((o) => o.id === orderId);
+  if (!ord) return;
+
+  pendingPaymentContext = {
+    type: "window_order",
+    orderId: ord.id
+  };
+
+  setTablePaymentMethod("cash");
+  if (payModalTableTitleEl) {
+    payModalTableTitleEl.textContent = `Pəncərə Sifarişi ${ord.orderNumber ? "#" + ord.orderNumber : ""} - Hesabı Bağla`;
+  }
+  if (payModalAmountBadgeEl) {
+    payModalAmountBadgeEl.textContent = formatMoney(ord.total || ord.totalAmount || 0);
+  }
+  if (paymentMethodModal) {
+    paymentMethodModal.classList.add("open");
+    paymentMethodModal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function cancelWindowOrder(orderId) {
+  const orderIdx = (state.windowOrders || []).findIndex((o) => o.id === orderId);
+  if (orderIdx === -1) return;
+
+  const ord = state.windowOrders[orderIdx];
+  const orderNum = ord.orderNumber || (orderIdx + 1);
+
+  state.windowOrders.splice(orderIdx, 1);
+  saveState({ syncWindowOrders: true });
+
+  logAuditEvent({
+    type: "order_cancelled",
+    typeLabel: "Pəncərə Sifarişi Ləğv Edildi",
+    tableName: `Pəncərə (#${orderNum})`,
+    tableId: "pencere",
+    amount: round2(ord.total || 0),
+    actorRole: currentUserRole
+  });
+
+  showToast(`Pəncərə sifarişi #${orderNum} ləğv edildi`);
+  renderWindowScreen();
+}
+
+function finalizeWindowOrderPayment(orderId, payMethod = "cash") {
+  const orderIdx = (state.windowOrders || []).findIndex((o) => o.id === orderId);
+  if (orderIdx === -1) return;
+
+  const ord = state.windowOrders[orderIdx];
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const closedByRoleKey = (currentUserRole === "waiter1" || currentUserRole === "waiter2") ? currentUserRole : "admin";
+  const orderTotal = round2(ord.total || ord.totalAmount || 0);
+
+  const txRecord = normalizeTransactionRecord({
+    id: `tx_win_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    time: timeStr,
+    date: getBusinessDateKey(now),
+    dateTimeLabel: getShortDateTimeAz(now),
+    source: "pencere",
+    tableId: "pencere",
+    tableName: `Pəncərə ${ord.orderNumber ? "#" + ord.orderNumber : ""}`.trim(),
+    total: orderTotal,
+    totalAmount: orderTotal,
+    paymentMethod: payMethod === "card" ? "card" : "cash",
+    items: ord.items || [],
+    closedBy: getRoleDisplayName(closedByRoleKey),
+    closedByRole: closedByRoleKey,
+    updatedAt: Date.now()
+  });
+
+  state.closedBills.push(txRecord);
+  state.windowOrders.splice(orderIdx, 1);
+
+  saveState({ newTransactions: [txRecord], syncWindowOrders: true });
+
+  logAuditEvent({
+    type: "bill",
+    typeLabel: `Pəncərə Sifarişi Ödənildi (${payMethod === "card" ? "Kart" : "Nağd"})`,
+    tableName: txRecord.tableName,
+    tableId: "pencere",
+    amount: orderTotal,
+    details: (ord.items || []).map((it) => `${it.name} × ${it.qty}`).join(", "),
+    actorRole: closedByRoleKey
+  });
+
+  const payText = payMethod === "card" ? "💳 Kartla" : "💵 Nağd";
+  showToast(`Pəncərə sifarişi bağlandı (${payText}: ${formatMoney(orderTotal)})`);
+
+  renderWindowScreen();
+  updateHeaderSales();
+}
+
+function finalizeWindowInstantPayment(payMethod = "cash") {
   const { totalAmount } = getWindowCartSummary();
   if (totalAmount <= 0) return;
 
@@ -1109,7 +1357,7 @@ function checkoutWindowCart() {
     tableName: "Pəncərə",
     total: round2(totalAmount),
     totalAmount: round2(totalAmount),
-    paymentMethod: selectedWindowPayMethod,
+    paymentMethod: payMethod === "card" ? "card" : "cash",
     items: billItems,
     closedBy: getRoleDisplayName(closedByRoleKey),
     closedByRole: closedByRoleKey,
@@ -1118,13 +1366,12 @@ function checkoutWindowCart() {
 
   state.closedBills.push(txRecord);
   state.windowCart = {};
-  setWindowPaymentMethod("cash"); // Növbəti müştəri üçün default Nağd-a qaytar
 
   saveState({ newTransactions: [txRecord], syncWindowCart: true });
 
   logAuditEvent({
     type: "bill",
-    typeLabel: `Pəncərə Satışı (${selectedWindowPayMethod === "card" ? "Kart" : "Nağd"})`,
+    typeLabel: `Pəncərə Satışı (${payMethod === "card" ? "Kart" : "Nağd"})`,
     tableName: "Pəncərə",
     tableId: "pencere",
     amount: round2(totalAmount),
@@ -1132,18 +1379,63 @@ function checkoutWindowCart() {
     actorRole: closedByRoleKey
   });
 
+  const payText = payMethod === "card" ? "💳 Kartla" : "💵 Nağd";
+  showToast(`Pəncərə satışı bağlandı (${payText}: ${formatMoney(totalAmount)})`);
+
   renderWindowScreen();
   updateHeaderSales();
 }
 
+function checkoutWindowCart() {
+  const { totalAmount } = getWindowCartSummary();
+  if (totalAmount <= 0) return;
+
+  pendingPaymentContext = {
+    type: "window_instant"
+  };
+
+  setTablePaymentMethod(selectedWindowPayMethod || "cash");
+  if (payModalTableTitleEl) {
+    payModalTableTitleEl.textContent = `Pəncərə Dərhal Satış - Ödəniş`;
+  }
+  if (payModalAmountBadgeEl) {
+    payModalAmountBadgeEl.textContent = formatMoney(totalAmount);
+  }
+  if (paymentMethodModal) {
+    paymentMethodModal.classList.add("open");
+    paymentMethodModal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function initWindowCategoryTabs() {
+  const tabs = document.querySelectorAll(".window-cat-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentWindowCategory = tab.getAttribute("data-cat") || "all";
+      renderWindowScreen();
+    });
+  });
+}
+
 function renderWindowScreen() {
   updateHeaderSales();
+  renderWindowPendingOrders();
 
   const { totalAmount, totalCount } = getWindowCartSummary();
   windowCartCountPillEl.textContent = `${totalCount} məhsul`;
   windowCartTotalEl.textContent = formatMoney(totalAmount);
-  windowCheckoutBtn.disabled = totalAmount <= 0;
-  windowClearCartBtn.disabled = totalAmount <= 0;
+
+  if (windowConfirmOrderBtn) {
+    windowConfirmOrderBtn.disabled = totalAmount <= 0;
+  }
+  if (windowCheckoutBtn) {
+    windowCheckoutBtn.disabled = totalAmount <= 0;
+  }
+  if (windowClearCartBtn) {
+    windowClearCartBtn.disabled = totalAmount <= 0;
+  }
 
   // Səbət siyahısı
   windowCartListEl.innerHTML = "";
@@ -1181,9 +1473,13 @@ function renderWindowScreen() {
     });
   }
 
-  // Pəncərə Menyusu Düymələri
+  // Pəncərə Menyusu Düymələri (Seçilmiş Kateqoriyaya Görə Filtrlənmə)
   windowMenuGridEl.innerHTML = "";
-  WINDOW_MENU_CATALOG.forEach((item) => {
+  const filteredCatalog = currentWindowCategory === "all"
+    ? WINDOW_MENU_CATALOG
+    : WINDOW_MENU_CATALOG.filter((item) => item.category === currentWindowCategory);
+
+  filteredCatalog.forEach((item) => {
     const qty = Number(state.windowCart[item.id]) || 0;
     const btn = document.createElement("button");
     btn.type = "button";
@@ -2003,6 +2299,11 @@ function openPaymentMethodModal() {
   const { totalAmount } = getTableSummary(table);
   if (totalAmount <= 0) return;
 
+  pendingPaymentContext = {
+    type: "table",
+    tableId: activeTableId
+  };
+
   setTablePaymentMethod("cash"); // Default: 💵 Nağd
   if (payModalTableTitleEl) {
     payModalTableTitleEl.textContent = `${table.name} — Hesabı Bağla`;
@@ -2020,6 +2321,7 @@ function closePaymentMethodModal() {
   if (!paymentMethodModal) return;
   paymentMethodModal.classList.remove("open");
   paymentMethodModal.setAttribute("aria-hidden", "true");
+  pendingPaymentContext = null;
 }
 
 function closeActiveTableBill() {
@@ -2027,6 +2329,18 @@ function closeActiveTableBill() {
 }
 
 function confirmCloseActiveTableBill() {
+  if (pendingPaymentContext && pendingPaymentContext.type === "window_order") {
+    finalizeWindowOrderPayment(pendingPaymentContext.orderId, selectedTablePayMethod);
+    closePaymentMethodModal();
+    return;
+  }
+
+  if (pendingPaymentContext && pendingPaymentContext.type === "window_instant") {
+    finalizeWindowInstantPayment(selectedTablePayMethod);
+    closePaymentMethodModal();
+    return;
+  }
+
   const table = state.tables.find((t) => t.id === activeTableId);
   if (!table) return;
 
@@ -2406,8 +2720,9 @@ function deleteClosedBillById(billId) {
 
   openDangerConfirmModal({
     title: "Bağlanmış Çeki Sil",
-    text: `"${bill.tableName || "Çek"}" üzrə <strong>${formatMoney(bill.total || 0)}</strong> məbləğindəki çek silinəcək. Bu əməliyyat geri qaytarılmır!<br><br>Təsdiq üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:`,
+    text: `"${bill.tableName || "Çek"}" üzrə <strong>${formatMoney(bill.total || 0)}</strong> məbləğindəki çek silinəcək. Bu əməliyyatı təsdiqləyirsiniz?`,
     buttonText: "🗑 Bəli, Çeki Sil",
+    requiresWord: false,
     onConfirm: () => doDeleteClosedBill(billId)
   });
 }
@@ -3436,13 +3751,14 @@ function closeReceiptVoucherModal() {
   }
 }
 
-// Accordion Açılıb-Bağlanma İdarəetməsi (4 Kart — Default Olaraq Hamısı Bağlı Açılır)
+// Accordion Açılıb-Bağlanma İdarəetməsi (5 Kart — Default Olaraq Hamısı Bağlı Açılır)
 function initReportAccordions() {
   const accConfigs = [
+    { header: accCafeHeader, card: accCafeCard, content: accCafeContent },
+    { header: accWindowHeader, card: accWindowCard, content: accWindowContent },
     { header: accWaiterHeader, card: accWaiterCard, content: accWaiterContent },
     { header: accTableStatsHeader, card: accTableStatsCard, content: accTableStatsContent },
-    { header: accSoldItemsHeader, card: accSoldItemsCard, content: accSoldItemsContent },
-    { header: accExpensesHeader, card: accExpensesCard, content: accExpensesContent }
+    { header: accAtmHeader, card: accAtmCard, content: accAtmContent }
   ];
 
   accConfigs.forEach(({ header, card, content }) => {
@@ -3564,13 +3880,13 @@ function openReportModal() {
   }
 
   // Başlanğıcda hesabat blokları BAĞLI (collapsed) vəziyyətdə olsun (Yığcam screenshot üçün)
-  [accWaiterCard, accTableStatsCard, accSoldItemsCard, accExpensesCard].forEach((card) => {
+  [accCafeCard, accWindowCard, accWaiterCard, accTableStatsCard, accAtmCard].forEach((card) => {
     if (card) card.classList.remove("open");
   });
-  [accWaiterContent, accTableStatsContent, accSoldItemsContent, accExpensesContent].forEach((content) => {
+  [accCafeContent, accWindowContent, accWaiterContent, accTableStatsContent, accAtmContent].forEach((content) => {
     if (content) content.style.display = "none";
   });
-  [accWaiterHeader, accTableStatsHeader, accSoldItemsHeader, accExpensesHeader].forEach((hdr) => {
+  [accCafeHeader, accWindowHeader, accWaiterHeader, accTableStatsHeader, accAtmHeader].forEach((hdr) => {
     if (hdr) hdr.setAttribute("aria-expanded", "false");
   });
 
@@ -3642,6 +3958,9 @@ function renderReportModal() {
 
   // ATM Nağdlaşdırma Tarixçəsi
   const atmList = Array.isArray(state.atmTransfers) ? state.atmTransfers.filter((a) => !a.deleted && !a.isDeleted) : [];
+  if (accAtmBadge) {
+    accAtmBadge.textContent = `${atmList.length} çıxarış`;
+  }
   if (reportAtmSectionEl && reportAtmTransfersListEl) {
     if (atmList.length === 0) {
       reportAtmSectionEl.style.display = "none";
@@ -3758,6 +4077,7 @@ function renderReportModal() {
   if (reportCafeNetBadgeEl) reportCafeNetBadgeEl.textContent = `Xalis: ${formatMoney(cafeNetCash)}`;
   if (reportCafeSalesEl) reportCafeSalesEl.textContent = formatMoney(cafeGrossSales);
   if (reportCafeExpensesEl) reportCafeExpensesEl.textContent = formatNegativeMoney(cafeExpenses);
+  if (reportCafeNetCashEl) reportCafeNetCashEl.textContent = formatMoney(cafeNetCash);
 
   const openTablesTotal = round2(
     state.tables.reduce((sum, t) => sum + getTableSummary(t).totalAmount, 0)
@@ -3909,6 +4229,7 @@ function renderReportModal() {
   if (reportWindowNetBadgeEl) reportWindowNetBadgeEl.textContent = `Xalis: ${formatMoney(winNetCash)}`;
   if (reportWindowSalesEl) reportWindowSalesEl.textContent = formatMoney(winGrossSales);
   if (reportWindowExpensesEl) reportWindowExpensesEl.textContent = formatNegativeMoney(winExpenses);
+  if (reportWindowNetCashEl) reportWindowNetCashEl.textContent = formatMoney(winNetCash);
 
   // Pəncərə Çekləri Siyahısı ('✏️ Redaktə' və '✕' ilə silmək imkanı)
   if (reportWindowTransactionsListEl) {
@@ -4084,7 +4405,7 @@ function checkAndExecuteAutoEndDay() {
 // ============================================================================
 let pendingDangerAction = null;
 
-function openDangerConfirmModal({ title, text, buttonText, onConfirm }) {
+function openDangerConfirmModal({ title, text, buttonText, requiresWord = true, onConfirm }) {
   if (!dangerConfirmModal) return;
   pendingDangerAction = onConfirm;
 
@@ -4092,11 +4413,16 @@ function openDangerConfirmModal({ title, text, buttonText, onConfirm }) {
     dangerConfirmTitle.innerHTML = title || "DİQQƏT: Bu əməliyyat geri qaytarılmır!";
   }
   if (dangerConfirmText) {
-    dangerConfirmText.innerHTML = text || "Bu əməliyyatı təsdiqləmək üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:";
+    dangerConfirmText.innerHTML = text || (requiresWord
+      ? "Bu əməliyyatı təsdiqləmək üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:"
+      : "Bu əməliyyatı icra etmək istədiyinizə əminsiniz?");
+  }
+  if (dangerInputWrap) {
+    dangerInputWrap.style.display = requiresWord ? "block" : "none";
   }
   if (dangerExecuteBtn) {
     dangerExecuteBtn.innerHTML = buttonText || "🗑 Bəli, Sil";
-    dangerExecuteBtn.disabled = true;
+    dangerExecuteBtn.disabled = requiresWord;
   }
   if (dangerConfirmInput) {
     dangerConfirmInput.value = "";
@@ -4104,9 +4430,11 @@ function openDangerConfirmModal({ title, text, buttonText, onConfirm }) {
 
   dangerConfirmModal.classList.add("open");
   dangerConfirmModal.setAttribute("aria-hidden", "false");
-  setTimeout(() => {
-    if (dangerConfirmInput) dangerConfirmInput.focus();
-  }, 100);
+  if (requiresWord) {
+    setTimeout(() => {
+      if (dangerConfirmInput) dangerConfirmInput.focus();
+    }, 100);
+  }
 }
 
 function closeDangerConfirmModal() {
@@ -4328,8 +4656,9 @@ function deleteArchiveBillById(archiveDayId, billId) {
 
   openDangerConfirmModal({
     title: "Arxiv Çekini Sil",
-    text: `"${targetBill.tableName || "Çek"}" (${formatMoney(targetBill.total || 0)}) çeki arxivdən silinəcək. Bu əməliyyat geri qaytarılmır!<br><br>Təsdiq üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:`,
+    text: `"${targetBill.tableName || "Çek"}" (${formatMoney(targetBill.total || 0)}) çeki arxivdən silinəcək. Bu əməliyyatı təsdiqləyirsiniz?`,
     buttonText: "🗑 Bəli, Çeki Sil",
+    requiresWord: false,
     onConfirm: () => doDeleteArchiveBill(archiveDayId, billId)
   });
 }
@@ -5014,6 +5343,10 @@ function applyIncomingTablesSnapshot(data) {
       state.windowCart = data.windowCart;
     }
 
+    if (Array.isArray(data.windowOrders)) {
+      state.windowOrders = data.windowOrders.filter((o) => o && !o.deleted);
+    }
+
     saveStateLocalOnly();
     refreshAllActiveViews();
   } finally {
@@ -5141,6 +5474,7 @@ function pushGranularLiveSync(options = {}) {
         clientId: CLIENT_ID,
         updatedAt: nowTs,
         windowCart: {},
+        windowOrders: [],
         tables: emptyTablesMap
       }).catch((err) => console.error("Firestore tables reset xətası:", err));
     }
@@ -5160,9 +5494,9 @@ function pushGranularLiveSync(options = {}) {
     return;
   }
 
-  // 1. Yalnız dəyişdirilmiş masaları və ya pəncərə səbətini { merge: true } ilə göndər
+  // 1. Yalnız dəyişdirilmiş masaları və ya pəncərə səbətini/sifarişlərini { merge: true } ilə göndər
   const changedTableIds = Array.isArray(options.changedTableIds) ? options.changedTableIds : [];
-  if ((changedTableIds.length > 0 || options.syncWindowCart) && firestoreTablesDocRef) {
+  if ((changedTableIds.length > 0 || options.syncWindowCart || options.syncWindowOrders) && firestoreTablesDocRef) {
     const tablesPatch = {
       syncId,
       clientId: CLIENT_ID,
@@ -5171,6 +5505,9 @@ function pushGranularLiveSync(options = {}) {
 
     if (options.syncWindowCart) {
       tablesPatch.windowCart = state.windowCart || {};
+    }
+    if (options.syncWindowOrders) {
+      tablesPatch.windowOrders = state.windowOrders || [];
     }
 
     if (changedTableIds.length > 0) {
@@ -5453,6 +5790,9 @@ if (windowPayCardBtn) {
   windowPayCardBtn.addEventListener("click", () => setWindowPaymentMethod("card"));
 }
 windowClearCartBtn.addEventListener("click", clearWindowCart);
+if (windowConfirmOrderBtn) {
+  windowConfirmOrderBtn.addEventListener("click", confirmWindowOrder);
+}
 windowCheckoutBtn.addEventListener("click", checkoutWindowCart);
 
 backToMainBtn.addEventListener("click", closeTableScreen);
@@ -5817,6 +6157,7 @@ applyTheme(getSavedTheme());
 ensureRoleSelectorModal();
 initBrandLogoTripleTap();
 initReportAccordions();
+initWindowCategoryTabs();
 applyRolePermissions();
 setAppMode("kafe");
 if (needsInitialRoleSelection) {
