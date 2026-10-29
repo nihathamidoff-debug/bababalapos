@@ -51,7 +51,8 @@ const MENU_CATEGORIES = [
   { id: "isti_ickiler", label: "İsti İçkilər", fullTitle: "İsti İçkilər" },
   { id: "soyuq_ickiler", label: "Soyuq İçkilər", fullTitle: "Soyuq İçkilər" },
   { id: "spirt", label: "Pivə & Spirt", fullTitle: "Spirtli İçkilər (Pivə və Araq)" },
-  { id: "mezeler", label: "Məzələr", fullTitle: "Məzələr" }
+  { id: "mezeler", label: "Məzələr", fullTitle: "Məzələr" },
+  { id: "pencere_mallari", label: "Pəncərə Malları", fullTitle: "Pəncərə Malları (Dürmək & Peraşki)" }
 ];
 
 // "BabaBala" Rəsmi Menyu Məlumat Bazası
@@ -124,14 +125,21 @@ const MENU_CATALOG = [
   { id: "dusbere_qizartmasi", name: "Düşbərə Qızartması", price: 3.00, category: "mezeler", unit: "pors" },
   { id: "petenek_qizartmasi", name: "Pətənək Qızartması", price: 3.00, category: "mezeler", unit: "pors" },
   { id: "petenek_zogal_sousu", name: "Pətənək Qızartması (zoğal sousu ilə)", price: 4.00, category: "mezeler", unit: "pors" },
-  { id: "qarisiq_tursu_assorti", name: "Qarışıq Turşu Assorti", price: 4.00, category: "mezeler", unit: "pors" }
+  { id: "qarisiq_tursu_assorti", name: "Qarışıq Turşu Assorti", price: 4.00, category: "mezeler", unit: "pors" },
+
+  // --- PƏNCƏRƏ MALLARI (AL-APAR / AYAQÜSTÜ) ---
+  { id: "win_durmek_et", name: "Ətli qızarmış dürmək", price: 0.60, category: "pencere_mallari", unit: "ədəd" },
+  { id: "win_durmek_sosis", name: "Sosisli qızarmış dürmək", price: 0.50, category: "pencere_mallari", unit: "ədəd" },
+  { id: "win_peraski_boyuk", name: "Böyük peraşki", price: 0.50, category: "pencere_mallari", unit: "ədəd" },
+  { id: "win_peraski_kicik", name: "Kiçik Peraşki", price: 0.30, category: "pencere_mallari", unit: "ədəd" },
+  { id: "win_peraski_mini", name: "Mini peraşki", price: 0.25, category: "pencere_mallari", unit: "ədəd" }
 ];
 
 // "BabaBala" Pəncərə Satışı (Ayaqüstü / Al-Apar) Menyu Məlumat Bazası
 const WINDOW_MENU_CATALOG = [
   { id: "win_durmek_et", name: "Ətli qızarmış dürmək", price: 0.60, unit: "ədəd" },
   { id: "win_durmek_sosis", name: "Sosisli qızarmış dürmək", price: 0.50, unit: "ədəd" },
-  { id: "win_peraski_boyuk", name: "Böyük peraşki", price: 0.60, unit: "ədəd" },
+  { id: "win_peraski_boyuk", name: "Böyük peraşki", price: 0.50, unit: "ədəd" },
   { id: "win_peraski_kicik", name: "Kiçik Peraşki", price: 0.30, unit: "ədəd" },
   { id: "win_peraski_mini", name: "Mini peraşki", price: 0.25, unit: "ədəd" }
 ];
