@@ -169,6 +169,9 @@
       <button type="button" id="openTransferTableBtn" class="transfer-table-header-btn" disabled>
         🔄 Masanı Köçür
       </button>
+      <button type="button" id="headerCloseBillBtn" class="header-close-bill-btn waiter-only-el" style="display: none;">
+        💳 Hesabı Bağla
+      </button>
     </header>
 
     <div class="panel-body">
@@ -199,6 +202,12 @@
 
       <!-- Menyu Kateqoriyaları (2 Sütunlu Kvadrat Kartlar) və ya Seçilmiş Kateqoriyanın Məhsulları -->
       <section class="menu-section">
+        <!-- Ofisiant üçün 'Digər Yeməklər' Açılan Düymə -->
+        <button type="button" id="toggleOtherMenuBtn" class="other-menu-toggle-btn waiter-only-el">
+          <span>🍲 Digər Yeməklər (Bütün Menyu)</span>
+          <span id="otherMenuArrowIcon" class="other-menu-arrow">▾</span>
+        </button>
+
         <div id="menuSectionHeader" class="subsection-header">
           <h3 id="menuSectionTitle" class="subsection-title">Menyu Kateqoriyaları</h3>
           <span id="menuSectionHint" class="subsection-hint">Kateqoriyaya toxunun</span>
@@ -600,7 +609,7 @@
       </div>
       <div class="confirm-actions">
         <button type="button" id="cancelPaymentMethodBtn" class="confirm-btn btn-cancel">Ləğv Et</button>
-        <button type="button" id="confirmCloseBillWithMethodBtn" class="confirm-btn btn-confirm-role">Ödənildi (Bağla)</button>
+        <button type="button" id="confirmCloseBillWithMethodBtn" class="confirm-btn btn-confirm-role admin-only-el">Ödənildi (Bağla)</button>
       </div>
     </div>
   </div>
@@ -800,6 +809,6 @@
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

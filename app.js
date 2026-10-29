@@ -683,6 +683,10 @@ const pinnedQuickGridEl = document.getElementById("pinnedQuickGrid");
 const menuSectionTitleEl = document.getElementById("menuSectionTitle");
 const menuSectionHintEl = document.getElementById("menuSectionHint");
 const quickMenuGridEl = document.getElementById("quickMenuGrid");
+const toggleOtherMenuBtn = document.getElementById("toggleOtherMenuBtn");
+const otherMenuArrowIcon = document.getElementById("otherMenuArrowIcon");
+const headerCloseBillBtn = document.getElementById("headerCloseBillBtn");
+let isOtherMenuOpenForWaiter = false;
 const activeTableTotalEl = document.getElementById("activeTableTotal");
 const saveOrderBtn = document.getElementById("saveOrderBtn");
 const closeBillBtn = document.getElementById("closeBillBtn");
@@ -1053,8 +1057,8 @@ function updateHeaderSales() {
 
 // Rejim Dəyişdirilməsi (Kafe Masaları vs Pəncərə Satışı)
 function setAppMode(mode) {
-  currentAppMode = mode;
-  if (mode === "kafe") {
+  currentAppMode = currentUserRole !== "admin" ? "kafe" : mode;
+  if (currentAppMode === "kafe") {
     modeCafeBtn.classList.add("active");
     modeWindowBtn.classList.remove("active");
     cafeViewEl.style.display = "block";
@@ -1541,34 +1545,48 @@ function renderMainScreen() {
       card.className = `table-card ${isBusy ? "is-busy" : "is-empty"}`;
 
       const isAdmin = currentUserRole === "admin";
-      let bottomHtml = "";
-      if (isBusy) {
-        bottomHtml = `
-          <div>
-            <span class="table-card-status-text">${formatMoney(totalAmount)}</span>
-            ${isAdmin && tableClosedTotal > 0 ? `<div class="table-card-history-badge">Əvvəl: ${formatMoney(tableClosedTotal)}</div>` : ""}
+
+      if (!isAdmin) {
+        // Ofisiant Kiosk Rejimi: Nəhəng kvadrat bloklar (BOŞ: Yaşıl / DOLU: Narıncı)
+        card.innerHTML = `
+          <div class="waiter-table-card-inner">
+            <span class="waiter-table-name">${table.name}</span>
+            <div class="waiter-table-status-tag ${isBusy ? "tag-busy" : "tag-empty"}">
+              ${isBusy ? `DOLU (${formatMoney(totalAmount)})` : `BOŞ`}
+            </div>
           </div>
-          <span class="table-card-meta">${totalCount} sifariş</span>
         `;
       } else {
-        bottomHtml = `
-          <div>
-            <span class="table-card-status-text">Boş</span>
-            ${isAdmin && tableClosedTotal > 0 ? `<div class="table-card-history-badge">Əvvəl: ${formatMoney(tableClosedTotal)}</div>` : ""}
+        // Admin Rejimi: Detallı əvvəlki hesablar və sifariş sayı
+        let bottomHtml = "";
+        if (isBusy) {
+          bottomHtml = `
+            <div>
+              <span class="table-card-status-text">${formatMoney(totalAmount)}</span>
+              ${tableClosedTotal > 0 ? `<div class="table-card-history-badge">Əvvəl: ${formatMoney(tableClosedTotal)}</div>` : ""}
+            </div>
+            <span class="table-card-meta">${totalCount} sifariş</span>
+          `;
+        } else {
+          bottomHtml = `
+            <div>
+              <span class="table-card-status-text">Boş</span>
+              ${tableClosedTotal > 0 ? `<div class="table-card-history-badge">Əvvəl: ${formatMoney(tableClosedTotal)}</div>` : ""}
+            </div>
+            <span class="table-card-meta">${tableClosedBills.length > 0 ? `${tableClosedBills.length} hesab bağlanıb` : "Sifariş yoxdur"}</span>
+          `;
+        }
+
+        card.innerHTML = `
+          <div class="table-card-top">
+            <span class="table-card-name">${table.name}</span>
+            <span class="table-status-pill">${isBusy ? "Dolu" : "Boş"}</span>
           </div>
-          <span class="table-card-meta">${isAdmin && tableClosedBills.length > 0 ? `${tableClosedBills.length} hesab bağlanıb` : "Sifariş yoxdur"}</span>
+          <div class="table-card-bottom">
+            ${bottomHtml}
+          </div>
         `;
       }
-
-      card.innerHTML = `
-        <div class="table-card-top">
-          <span class="table-card-name">${table.name}</span>
-          <span class="table-status-pill">${isBusy ? "Dolu" : "Boş"}</span>
-        </div>
-        <div class="table-card-bottom">
-          ${bottomHtml}
-        </div>
-      `;
 
       card.addEventListener("click", () => {
         openTableScreen(table.id);
@@ -1592,6 +1610,7 @@ function openTableScreen(tableId) {
     activeTableCommittedSnapshot = null;
   }
   activeCategory = null; // Həmişə 2 sütunlu kvadrat kateqoriya görünüşü ilə açılır
+  isOtherMenuOpenForWaiter = false;
   currentTeaPrice = 2.00;
   if (menuSearchInput) menuSearchInput.value = "";
   if (clearMenuSearchBtn) clearMenuSearchBtn.style.display = "none";
@@ -1638,6 +1657,39 @@ function updateTableActionButtonsState(table) {
   const isDirty = isTableOrderDraftDirty(table);
   const { totalAmount, totalCount } = getTableSummary(table);
 
+  if (currentUserRole !== "admin") {
+    // OFİSİANT "YAŞLI REJİMİ":
+    // 1. Ekranın ən aşağısında YALNIZ BİR DƏNƏ NƏHƏNG YAŞIL DÜYMƏ: "💾 SİFARİŞİ VUR (MASAYA YAZ)"
+    saveOrderBtn.textContent = "💾 SİFARİŞİ VUR (MASAYA YAZ)";
+    saveOrderBtn.className = "save-order-btn btn-waiter-huge-submit";
+    saveOrderBtn.disabled = false;
+
+    // 2. "💳 HESABI BAĞLA" düyməsi YALNIZ masa dolu olanda və ən küncdə fərqli rəngdə görünsün
+    if (totalAmount > 0) {
+      closeBillBtn.style.display = "flex";
+      closeBillBtn.textContent = `💳 HESABI BAĞLA (${formatMoney(totalAmount)})`;
+      closeBillBtn.className = "close-bill-btn btn-waiter-close-bill";
+      closeBillBtn.disabled = false;
+
+      if (headerCloseBillBtn) {
+        headerCloseBillBtn.style.display = "flex";
+        headerCloseBillBtn.textContent = `💳 Hesabı Bağla (${formatMoney(totalAmount)})`;
+      }
+    } else {
+      closeBillBtn.style.display = "none";
+      if (headerCloseBillBtn) {
+        headerCloseBillBtn.style.display = "none";
+      }
+    }
+    return;
+  }
+
+  // ADMİN REJİMİ:
+  if (headerCloseBillBtn) {
+    headerCloseBillBtn.style.display = "none";
+  }
+  closeBillBtn.style.display = "flex";
+
   if (isDirty) {
     // Masada təsdiqlənməmiş yeni məhsul (draft) olduqda:
     // Düymə "💾 SİFARİŞİ TƏSDİQLƏ" mətni ilə canlı YAŞIL olur; "💳 HESABI BAĞLA" passiv/boz qalır.
@@ -1683,13 +1735,47 @@ function confirmAndSaveActiveTableOrder() {
   if (!table) return;
 
   const isDirty = isTableOrderDraftDirty(table);
+  const { totalCount, totalAmount } = getTableSummary(table);
+
+  if (currentUserRole !== "admin") {
+    // OFİSİANT REJİMİ:
+    if (totalCount === 0 && !isDirty) {
+      showToast("⚠️ Səbət boşdur, məhsul seçin!");
+      return;
+    }
+
+    table.lastWaiter = currentUserRole;
+    table.updatedAt = Date.now();
+
+    saveState({ changedTableIds: [table.id] });
+
+    logAuditEvent({
+      type: "order",
+      typeLabel: "Sifariş Masaya Yazıldı",
+      tableName: table.name,
+      tableId: table.id,
+      amount: totalAmount,
+      details: getTableOrderItemsSummaryString(table) || "Sifariş boşaldıldı",
+      actorRole: currentUserRole
+    });
+
+    activeTableCommittedSnapshot = {
+      orders: { ...table.orders },
+      customOrders: (table.customOrders || []).map((o) => ({ ...o }))
+    };
+
+    showToast(`💾 ${table.name} sifarişi yazıldı (${formatMoney(totalAmount)})`);
+    closeTableScreen(false); // Avtomatik masalar siyahısına qayıdır!
+    return;
+  }
+
+  // ADMİN REJİMİ:
   if (!isDirty) {
     // Əgər artıq təsdiqlənibsə və "➕ Sifarişi əlavə et" basılıbsa, axtarışı fokusla
     if (menuSearchInput) menuSearchInput.focus();
     return;
   }
 
-  const { totalCount, totalAmount } = getTableSummary(table);
   table.lastWaiter = currentUserRole;
   table.updatedAt = Date.now();
 
@@ -1775,6 +1861,66 @@ function createMenuItemButton(table, item) {
 function renderPinnedQuickItems(table) {
   pinnedQuickGridEl.innerHTML = "";
 
+  if (currentUserRole !== "admin") {
+    pinnedQuickGridEl.className = "pinned-quick-grid waiter-kiosk-grid";
+
+    // Ofisiant Kiosk Rejimi: Yalnız ən çox gedən 8 əsas məhsul NƏHƏNG KARTLAR şəklində (+ və − ilə)
+    const waiterQuickList = [
+      { id: "sade_cay_jek", title: "Sadə Çay (1 ₼)", defaultPrice: 1.00 },
+      { id: "sade_cay", title: "Armudu Çay (2 ₼)", defaultPrice: 2.00 },
+      { id: "suzme_pive_nzs_05", title: "Süzmə Pivə NZS", defaultPrice: 1.70 },
+      { id: "suzme_araq_100q", title: "Süzmə Araq 100qr", defaultPrice: 2.00 },
+      { id: "qend_limon", title: "Qənd / Limon", defaultPrice: 1.00 },
+      { id: "corek", title: "Çörək", defaultPrice: 0.50 },
+      { id: "peraski_kafe", title: "Peraşki", defaultPrice: 0.60 },
+      { id: "su_qazsiz_05", title: "Su 0.5l", defaultPrice: 0.50 }
+    ];
+
+    waiterQuickList.forEach((def) => {
+      const item = MENU_CATALOG.find((m) => m.id === def.id) || {
+        id: def.id,
+        name: def.title,
+        price: def.defaultPrice,
+        unit: "ədəd"
+      };
+      const qty = Number(table.orders[item.id]) || 0;
+
+      const card = document.createElement("div");
+      card.className = `waiter-quick-card ${qty > 0 ? "has-qty" : ""}`;
+      card.innerHTML = `
+        <div class="wqc-info">
+          <span class="wqc-title">${def.title}</span>
+          <span class="wqc-price">${formatMoney(item.price)}</span>
+        </div>
+        <div class="wqc-controls">
+          <button type="button" class="wqc-btn wqc-btn-minus ${qty === 0 ? "disabled" : ""}" aria-label="Azalt">−</button>
+          <span class="wqc-qty-val">${qty}</span>
+          <button type="button" class="wqc-btn wqc-btn-plus" aria-label="Artır">+</button>
+        </div>
+      `;
+
+      card.querySelector(".wqc-btn-minus").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (qty > 0) updateTableItemQty(table.id, item.id, -1);
+      });
+
+      card.querySelector(".wqc-btn-plus").addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateTableItemQty(table.id, item.id, 1);
+      });
+
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".wqc-btn-minus")) return;
+        updateTableItemQty(table.id, item.id, 1);
+      });
+
+      pinnedQuickGridEl.appendChild(card);
+    });
+    return;
+  }
+
+  pinnedQuickGridEl.className = "pinned-quick-grid";
+
   // 1. Sadə Çay (Digər kartlarla eyni ölçüdə, üzərində tək düymə ilə 1 ₼ / 2 ₼ dəyişimi)
   const teaQty2 = Number(table.orders["sade_cay"]) || 0;
   const teaQty1 = Number(table.orders["sade_cay_jek"]) || 0;
@@ -1830,6 +1976,26 @@ function renderPinnedQuickItems(table) {
 // 2 Sütunlu Kvadrat Kateqoriya Kartları, Seçilmiş Kateqoriyanın Məhsulları və ya Axtarış Nəticələri
 function renderQuickMenu(table) {
   quickMenuGridEl.innerHTML = "";
+
+  if (currentUserRole !== "admin") {
+    // Ofisiant Kiosk Rejimi: Yalnız istənildikdə tək "Digər Yeməklər" düyməsi ilə açılır
+    if (!isOtherMenuOpenForWaiter) {
+      quickMenuGridEl.style.display = "none";
+      if (toggleOtherMenuBtn) {
+        toggleOtherMenuBtn.classList.remove("active");
+        toggleOtherMenuBtn.innerHTML = `<span>🍲 Digər Yeməklər (Bütün Menyu)</span> <span class="other-menu-arrow">▾</span>`;
+      }
+      return;
+    } else {
+      quickMenuGridEl.style.display = "grid";
+      if (toggleOtherMenuBtn) {
+        toggleOtherMenuBtn.classList.add("active");
+        toggleOtherMenuBtn.innerHTML = `<span>▲ Digər Yeməkləri Bağla</span> <span class="other-menu-arrow">▴</span>`;
+      }
+    }
+  } else {
+    quickMenuGridEl.style.display = "grid";
+  }
 
   const query = menuSearchInput ? menuSearchInput.value.trim().toLowerCase() : "";
   if (query) {
@@ -2310,6 +2476,14 @@ function openPaymentMethodModal() {
   }
   if (payModalAmountBadgeEl) {
     payModalAmountBadgeEl.textContent = formatMoney(totalAmount);
+  }
+
+  if (currentUserRole !== "admin") {
+    if (modalPayCashBtn) modalPayCashBtn.innerHTML = `<span class="pay-method-icon">💵</span><span class="pay-method-name">NAĞD ÖDƏNİŞ</span>`;
+    if (modalPayCardBtn) modalPayCardBtn.innerHTML = `<span class="pay-method-icon">💳</span><span class="pay-method-name">KARTLA ÖDƏNİŞ</span>`;
+  } else {
+    if (modalPayCashBtn) modalPayCashBtn.innerHTML = `💵 Nağd`;
+    if (modalPayCardBtn) modalPayCardBtn.innerHTML = `💳 Kart`;
   }
   if (paymentMethodModal) {
     paymentMethodModal.classList.add("open");
@@ -4989,6 +5163,7 @@ function applyRolePermissions() {
     closeReportModal();
     closeConfirmResetModal();
     closeArchiveModal();
+    setAppMode("kafe");
   }
 
   refreshAllActiveViews();
@@ -5884,10 +6059,20 @@ document.addEventListener("click", (e) => {
 
 // Ödəniş Metodu (💵 Nağd / 💳 Kart) Modalı Dinləyiciləri
 if (modalPayCashBtn) {
-  modalPayCashBtn.addEventListener("click", () => setTablePaymentMethod("cash"));
+  modalPayCashBtn.addEventListener("click", () => {
+    setTablePaymentMethod("cash");
+    if (currentUserRole !== "admin") {
+      confirmCloseActiveTableBill();
+    }
+  });
 }
 if (modalPayCardBtn) {
-  modalPayCardBtn.addEventListener("click", () => setTablePaymentMethod("card"));
+  modalPayCardBtn.addEventListener("click", () => {
+    setTablePaymentMethod("card");
+    if (currentUserRole !== "admin") {
+      confirmCloseActiveTableBill();
+    }
+  });
 }
 if (cancelPaymentMethodBtn) {
   cancelPaymentMethodBtn.addEventListener("click", closePaymentMethodModal);
@@ -5898,6 +6083,18 @@ if (confirmCloseBillWithMethodBtn) {
 if (paymentMethodModal) {
   paymentMethodModal.addEventListener("click", (e) => {
     if (e.target === paymentMethodModal) closePaymentMethodModal();
+  });
+}
+
+// Ofisiant Kiosk Rejimi: Küncdəki Hesabı Bağla və Digər Yeməklər Dinləyiciləri
+if (headerCloseBillBtn) {
+  headerCloseBillBtn.addEventListener("click", closeActiveTableBill);
+}
+if (toggleOtherMenuBtn) {
+  toggleOtherMenuBtn.addEventListener("click", () => {
+    isOtherMenuOpenForWaiter = !isOtherMenuOpenForWaiter;
+    const table = state.tables.find((t) => t.id === activeTableId);
+    if (table) renderQuickMenu(table);
   });
 }
 

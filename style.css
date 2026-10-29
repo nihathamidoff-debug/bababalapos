@@ -1989,6 +1989,10 @@ input {
 /* ============================================================================
    ROL SƏLAHİYYƏTLƏRİ VƏ BİR DƏFƏLİK ROL SEÇİMİ MODALI (iOS PWA FALLBACK)
    ============================================================================ */
+body.role-admin .waiter-only-el {
+  display: none !important;
+}
+
 body.role-waiter .admin-only-el,
 body.role-waiter .edit-record-btn,
 body.role-waiter .delete-record-btn,
@@ -1997,8 +2001,440 @@ body.role-waiter .btn-add-archive-expense,
 body.role-waiter .export-csv-btn,
 body.role-waiter .export-csv-btn-mini,
 body.role-waiter .print-voucher-btn,
-body.role-waiter .print-voucher-btn-mini {
+body.role-waiter .print-voucher-btn-mini,
+body.role-waiter .mode-switch-bar,
+body.role-waiter .daily-sales-card,
+body.role-waiter .status-legend,
+body.role-waiter #themeToggleBtn,
+body.role-waiter #openArchiveHeaderBtn,
+body.role-waiter .menu-search-wrap,
+body.role-waiter #openTransferTableBtn,
+body.role-waiter #tableClosedBillsSection,
+body.role-waiter .subsection-hint,
+body.role-waiter #menuSectionHeader {
   display: none !important;
+}
+
+/* ============================================================================
+   OFİSİANT "YAŞLI REJİMİ" (ULTRA-SADƏ KİOSK İNTERFEYSİ)
+   ============================================================================ */
+
+/* 1. Addım 1: Masalar Ekranı (Nəhəng Kvadrat Bloklar) */
+body.role-waiter .tables-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 4px 0 16px;
+}
+
+body.role-waiter .table-card {
+  min-height: 138px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-radius: 24px;
+  padding: 16px 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  transition: transform 0.1s ease;
+}
+
+body.role-waiter .table-card:active {
+  transform: scale(0.96);
+}
+
+body.role-waiter .waiter-table-card-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+body.role-waiter .waiter-table-name {
+  font-size: 1.55rem;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+body.role-waiter .waiter-table-status-tag {
+  font-size: 1.22rem;
+  font-weight: 900;
+  padding: 8px 14px;
+  border-radius: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  width: 100%;
+  max-width: 175px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* Boş Masa: Yaşıl rəng və böyük hərflərlə "BOŞ" */
+body.role-waiter .table-card.is-empty {
+  background: #f0fdf4 !important;
+  border: 3.5px solid #16a34a !important;
+  box-shadow: 0 6px 18px rgba(22, 163, 74, 0.2);
+}
+
+body.role-waiter .table-card.is-empty .waiter-table-status-tag.tag-empty {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+/* Dolu masa: Narıncı rəng və "DOLU (X ₼)" */
+body.role-waiter .table-card.is-busy {
+  background: #fffbeb !important;
+  border: 3.5px solid #f59e0b !important;
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.28);
+}
+
+body.role-waiter .table-card.is-busy .waiter-table-status-tag.tag-busy {
+  background: #d97706;
+  color: #ffffff;
+  font-size: 1.1rem;
+}
+
+/* Dark mode uyğunluğu */
+body.role-waiter.dark-mode .table-card.is-empty {
+  background: #064e3b !important;
+  border-color: #10b981 !important;
+}
+body.role-waiter.dark-mode .table-card.is-empty .waiter-table-name {
+  color: #f0fdf4;
+}
+body.role-waiter.dark-mode .table-card.is-empty .waiter-table-status-tag.tag-empty {
+  background: #10b981;
+  color: #022c22;
+}
+
+body.role-waiter.dark-mode .table-card.is-busy {
+  background: #78350f !important;
+  border-color: #f59e0b !important;
+}
+body.role-waiter.dark-mode .table-card.is-busy .waiter-table-name {
+  color: #fffbeb;
+}
+body.role-waiter.dark-mode .table-card.is-busy .waiter-table-status-tag.tag-busy {
+  background: #f59e0b;
+  color: #451a03;
+}
+
+/* 2. Addım 2: Sifariş Ekranı (Nəhəng 6-8 Əsas Məhsul Kartları) */
+body.role-waiter .panel-body {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+body.role-waiter .Pinned-section {
+  order: 1;
+  margin-bottom: 14px;
+}
+
+body.role-waiter .order-section {
+  order: 2;
+  margin-bottom: 14px;
+}
+
+body.role-waiter .menu-section {
+  order: 3;
+}
+
+body.role-waiter .waiter-kiosk-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+body.role-waiter .waiter-quick-card {
+  background: var(--bg-surface);
+  border: 2.5px solid var(--border-color);
+  border-radius: 18px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 86px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.15s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+body.role-waiter .waiter-quick-card:active {
+  transform: scale(0.97);
+}
+
+body.role-waiter .waiter-quick-card.has-qty {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+}
+
+body.role-waiter.dark-mode .waiter-quick-card.has-qty {
+  background: #064e3b;
+  border-color: #10b981;
+}
+
+body.role-waiter .wqc-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+body.role-waiter .wqc-title {
+  font-size: 1.12rem;
+  font-weight: 900;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+body.role-waiter .wqc-price {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+body.role-waiter.dark-mode .wqc-price {
+  color: #34d399;
+}
+
+body.role-waiter .wqc-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.role-waiter .wqc-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  font-size: 1.45rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+body.role-waiter .wqc-btn:active {
+  transform: scale(0.9);
+}
+
+body.role-waiter .wqc-btn-plus {
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+}
+
+body.role-waiter .wqc-btn-minus {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+body.role-waiter.dark-mode .wqc-btn-minus {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+body.role-waiter .wqc-btn-minus.disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+body.role-waiter .wqc-qty-val {
+  font-size: 1.35rem;
+  font-weight: 900;
+  min-width: 24px;
+  text-align: center;
+  color: var(--text-main);
+}
+
+/* Digər Yeməklər Açılan Düymə */
+.other-menu-toggle-btn {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  background: var(--bg-surface);
+  border: 2px dashed #94a3b8;
+  border-radius: 16px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: background 0.15s ease;
+}
+
+.other-menu-toggle-btn:active,
+.other-menu-toggle-btn.active {
+  background: #e2e8f0;
+  border-style: solid;
+  border-color: #64748b;
+}
+
+body.dark-mode .other-menu-toggle-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+.other-menu-arrow {
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+/* 3. Addım 3: Nəhəng Yaşıl Sifariş Düyməsi */
+body.role-waiter .panel-footer {
+  padding: 12px 16px calc(var(--safe-bottom) + 12px);
+  background: var(--bg-surface);
+  border-top: 1.5px solid var(--border-color);
+}
+
+body.role-waiter .bill-summary-row {
+  margin-bottom: 10px;
+}
+
+body.role-waiter .bill-label {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+body.role-waiter .bill-total-amount {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #16a34a;
+}
+
+body.role-waiter.dark-mode .bill-total-amount {
+  color: #34d399;
+}
+
+body.role-waiter .table-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+/* Nəhəng Yaşıl Düymə: 💾 SİFARİŞİ VUR (MASAYA YAZ) */
+body.role-waiter .btn-waiter-huge-submit {
+  width: 100%;
+  min-height: 60px;
+  font-size: 1.22rem;
+  font-weight: 900;
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(22, 163, 74, 0.45);
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+body.role-waiter .btn-waiter-huge-submit:active {
+  transform: scale(0.98);
+}
+
+/* Küncdə Fərqli Rəngdə Hesabı Bağla Düyməsi */
+body.role-waiter .header-close-bill-btn {
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  font-weight: 900;
+  box-shadow: 0 3px 10px rgba(190, 18, 60, 0.35);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+body.role-waiter .header-close-bill-btn:active {
+  transform: scale(0.95);
+}
+
+body.role-waiter .btn-waiter-close-bill {
+  width: 100%;
+  min-height: 48px;
+  background: #fef2f2 !important;
+  border: 2px solid #fecdd3 !important;
+  color: #be123c !important;
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+body.role-waiter.dark-mode .btn-waiter-close-bill {
+  background: #4c0519 !important;
+  border-color: #9f1239 !important;
+  color: #fda4af !important;
+}
+
+/* 4. Hesab Bağlama Modalı (2 Nəhəng Seçim: NAĞD və KART) */
+body.role-waiter .payment-modal-dialog {
+  max-width: 380px;
+  padding: 24px 20px;
+  border-radius: 24px;
+}
+
+body.role-waiter .payment-modal-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 18px 0;
+}
+
+body.role-waiter .pay-method-btn {
+  width: 100%;
+  min-height: 65px;
+  font-size: 1.25rem;
+  font-weight: 900;
+  border-radius: 18px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+body.role-waiter .pay-method-btn:active {
+  transform: scale(0.97);
+}
+
+body.role-waiter .pay-method-btn[data-method="cash"] {
+  background: linear-gradient(135deg, #16a34a, #15803d) !important;
+}
+
+body.role-waiter .pay-method-btn[data-method="card"] {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+}
+
+body.role-waiter .pay-method-icon {
+  font-size: 1.6rem;
+}
+
+body.role-waiter .pay-method-name {
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
 
 .archive-expenses-header {
@@ -2018,10 +2454,12 @@ body.role-waiter .bottom-bar {
 
 body.role-waiter .btn-expense {
   width: auto;
-  min-width: 150px;
-  min-height: 34px;
-  padding: 5px 16px;
-  font-size: 0.78rem;
+  min-width: 180px;
+  min-height: 40px;
+  padding: 6px 18px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  border-radius: 12px;
 }
 
 .role-auth-overlay {
