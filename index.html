@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="BabaBala">
   <meta name="theme-color" content="#0f172a">
   <title>BabaBala — Kassa və Masa İdarəetməsi</title>
-  <link rel="manifest" href="manifest.json?v=12">
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="manifest" href="manifest.json?v=13">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -139,6 +139,71 @@
             <button type="button" class="window-cat-tab" data-cat="soyuq_ickiler">🥤 Soyuq İçkilər</button>
           </div>
           <div id="windowMenuGrid" class="quick-menu-grid"></div>
+        </section>
+      </div>
+
+      <!-- 3. OFİSİANT SÜRƏTLİ POS PANELİ ("Seç ➔ Masaya At ➔ Hesabı Bağla") -->
+      <div id="waiterExpressView" class="waiter-express-view waiter-only-el">
+        <!-- BÖLMƏ 1: Ödəniş Gözləyənlər (Dolu Masalar və Pəncərə) -->
+        <section class="wexp-pending-section">
+          <div class="wexp-section-head">
+            <div class="wexp-head-title">
+              <span>⏳</span>
+              <h3>Ödəniş Gözləyənlər (Dolu Masalar)</h3>
+            </div>
+            <span id="wexpBusyCountBadge" class="wexp-count-pill">0 açıq</span>
+          </div>
+          <div id="wexpPendingList" class="wexp-pending-list"></div>
+        </section>
+
+        <!-- BÖLMƏ 2: Məhsul Blokları (🍺 İÇKİLƏR & 🍲 YEMƏK / MƏZƏ) -->
+        <div class="wexp-menu-blocks">
+          <!-- Blok 1: 🍺 İÇKİLƏR -->
+          <section class="wexp-block wexp-block-drinks">
+            <div class="wexp-block-header">
+              <span class="wexp-block-title">🍺 İÇKİLƏR</span>
+              <span class="wexp-block-sub">Toxun ➔ +1 əlavə et</span>
+            </div>
+            <div id="wexpDrinksGrid" class="wexp-cards-grid"></div>
+          </section>
+
+          <!-- Blok 2: 🍲 YEMƏK / MƏZƏ -->
+          <section class="wexp-block wexp-block-food">
+            <div class="wexp-block-header">
+              <span class="wexp-block-title">🍲 YEMƏK / MƏZƏ</span>
+              <span class="wexp-block-sub">Toxun ➔ +1 əlavə et</span>
+            </div>
+            <div id="wexpFoodGrid" class="wexp-cards-grid"></div>
+            <!-- Lazım olduqda açılan Digər Menyu siyahısı -->
+            <div id="wexpOtherMenuDrawer" class="wexp-other-drawer" style="display: none;"></div>
+          </section>
+        </div>
+
+        <!-- BÖLMƏ 3: Seçilmiş Sifarişi Tək Toxunuşla Masaya və ya Pəncərəyə Göndərmə -->
+        <section id="wexpDispatchSection" class="wexp-dispatch-section">
+          <div id="wexpSummaryBar" class="wexp-summary-bar is-empty">
+            <div class="wexp-summary-left">
+              <strong id="wexpSummaryCountPrice" class="wexp-summary-main">0 Məhsul = 0.00 ₼</strong>
+              <span id="wexpSummaryItemsPreview" class="wexp-summary-sub">Yuxarıdan məhsullara toxunaraq seçin</span>
+            </div>
+            <button type="button" id="wexpClearSelectionBtn" class="wexp-clear-btn" style="display: none;">
+              ✕ Sıfırla
+            </button>
+          </div>
+
+          <div class="wexp-destinations-wrap">
+            <div class="wexp-dest-group-label">Hara göndərilsin? (Toxun ➔ Dərhal yazılır):</div>
+            <div id="wexpTablesRowHall" class="wexp-dest-grid wexp-grid-hall"></div>
+            <div id="wexpTablesRowYard" class="wexp-dest-grid wexp-grid-yard"></div>
+            <div class="wexp-window-dest-row">
+              <button type="button" id="wexpSendWindowPendingBtn" class="wexp-dest-btn wexp-btn-window">
+                🪟 Pəncərəyə Yaz
+              </button>
+              <button type="button" id="wexpSendWindowCashBtn" class="wexp-dest-btn wexp-btn-window-cash">
+                🪟 Pəncərə - Nağd Ödənildi
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </main>
@@ -828,6 +893,6 @@
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

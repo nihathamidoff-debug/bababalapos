@@ -116,6 +116,7 @@ const MENU_CATALOG = [
   { id: "suse_araq_07l", name: "Şüşə Araq 0.7l", price: 15.00, category: "spirt", unit: "ədəd" },
 
   // --- MƏZƏLƏR ---
+  { id: "quru_et", name: "Quru Ət", price: 4.00, category: "mezeler", unit: "pors" },
   { id: "sacaqli_pendir", name: "Saçaqlı Pendir", price: 3.00, category: "mezeler", unit: "pors" },
   { id: "qizardilmis_sacaqli_pendir", name: "Qızardılmış Saçaqlı Pendir", price: 4.00, category: "mezeler", unit: "pors" },
   { id: "cipsi", name: "Çipsi", price: 2.00, category: "mezeler", unit: "pors" },
@@ -683,6 +684,27 @@ const waiterChangeTableBtn = document.getElementById("waiterChangeTableBtn");
 const waiterDirectPayRow = document.getElementById("waiterDirectPayRow");
 const waiterPayCashDirectBtn = document.getElementById("waiterPayCashDirectBtn");
 const waiterPayCardDirectBtn = document.getElementById("waiterPayCardDirectBtn");
+
+// Ofisiant Sürətli POS Paneli ("Seç ➔ Masaya At ➔ Hesabı Bağla") Elementləri
+const waiterExpressViewEl = document.getElementById("waiterExpressView");
+const wexpBusyCountBadgeEl = document.getElementById("wexpBusyCountBadge");
+const wexpPendingListEl = document.getElementById("wexpPendingList");
+const wexpDrinksGridEl = document.getElementById("wexpDrinksGrid");
+const wexpFoodGridEl = document.getElementById("wexpFoodGrid");
+const wexpOtherMenuDrawerEl = document.getElementById("wexpOtherMenuDrawer");
+const wexpDispatchSectionEl = document.getElementById("wexpDispatchSection");
+const wexpSummaryBarEl = document.getElementById("wexpSummaryBar");
+const wexpSummaryCountPriceEl = document.getElementById("wexpSummaryCountPrice");
+const wexpSummaryItemsPreviewEl = document.getElementById("wexpSummaryItemsPreview");
+const wexpClearSelectionBtn = document.getElementById("wexpClearSelectionBtn");
+const wexpTablesRowHallEl = document.getElementById("wexpTablesRowHall");
+const wexpTablesRowYardEl = document.getElementById("wexpTablesRowYard");
+const wexpSendWindowPendingBtn = document.getElementById("wexpSendWindowPendingBtn");
+const wexpSendWindowCashBtn = document.getElementById("wexpSendWindowCashBtn");
+
+let waiterPadCart = {}; // Ofisiantın hazırda seçdiyi məhsullar: { [itemId]: qty }
+let isWaiterOtherDrawerOpen = false;
+let expandedWaiterPendingKey = null; // Açıq olan dolu masa və ya pəncərə sətiri
 const orderItemCountEl = document.getElementById("orderItemCount");
 const orderListEl = document.getElementById("orderList");
 const pinnedQuickGridEl = document.getElementById("pinnedQuickGrid");
@@ -1024,16 +1046,16 @@ function getTableSummary(table) {
 }
 
 // Bildiriş göstərmək (Yalnız mühüm sistem hadisələri üçün, qısa və yığcam)
-function showToast(message) {
+function showToast(message, durationMs = 1300, isSuccess = false) {
   if (!toastContainer) return;
   toastContainer.innerHTML = "";
   const toast = document.createElement("div");
-  toast.className = "toast";
+  toast.className = `toast ${isSuccess ? "toast-success" : ""}`.trim();
   toast.textContent = message;
   toastContainer.appendChild(toast);
   setTimeout(() => {
     toast.remove();
-  }, 1300);
+  }, durationMs);
 }
 
 // Yuxarı Başlıqdakı Kassa Məbləğinin Yenilənməsi
@@ -1511,9 +1533,602 @@ function renderWindowScreen() {
   });
 }
 
+// ============================================================================
+// OFİSİANT SÜRƏTLİ POS PANELİ ("Seç ➔ Masaya At ➔ Hesabı Bağla")
+// ============================================================================
+const WAITER_EXPRESS_DRINKS = [
+  { id: "sade_cay_jek", icon: "☕", label: "1₼ Çay", defaultPrice: 1.00, accent: "accent-amber" },
+  { id: "sade_cay", icon: "🫖", label: "2₼ Çay", defaultPrice: 2.00, accent: "accent-orange" },
+  { id: "suzme_pive_nzs_05", icon: "🍺", label: "Pivə Bakal", defaultPrice: 1.70, accent: "accent-gold" },
+  { id: "suzme_araq_100q", icon: "🥃", label: "100qr Araq", defaultPrice: 2.00, accent: "accent-sky" },
+  { id: "su_qazsiz_05", icon: "💧", label: "Su 0.5L", defaultPrice: 0.50, accent: "accent-cyan" }
+];
+
+const WAITER_EXPRESS_FOOD = [
+  { id: "peraski_kafe", icon: "🥟", label: "Peraşki", defaultPrice: 0.60, accent: "accent-gold" },
+  { id: "quru_et", icon: "🥩", label: "Quru Ət", defaultPrice: 4.00, accent: "accent-emerald" },
+  { id: "pomidor_yumurta", icon: "🍳", label: "Pomidor-Yumurta", defaultPrice: 4.00, accent: "accent-emerald" }
+];
+
+function getWaiterPadSummary() {
+  let totalCount = 0;
+  let totalAmount = 0;
+  const items = [];
+
+  for (const [itemId, rawQty] of Object.entries(waiterPadCart)) {
+    const qty = Number(rawQty) || 0;
+    if (qty <= 0) continue;
+    const catItem = MENU_CATALOG.find((m) => m.id === itemId);
+    if (!catItem) continue;
+    const lineTotal = round2(qty * catItem.price);
+    totalCount += qty;
+    totalAmount = round2(totalAmount + lineTotal);
+    items.push({
+      itemId: catItem.id,
+      name: catItem.name,
+      qty,
+      price: catItem.price,
+      unit: catItem.unit,
+      total: lineTotal
+    });
+  }
+
+  return { totalCount, totalAmount, items };
+}
+
+function updateWaiterPadItem(itemId, delta) {
+  const current = Number(waiterPadCart[itemId]) || 0;
+  const next = Math.max(0, current + delta);
+  if (next === 0) {
+    delete waiterPadCart[itemId];
+  } else {
+    waiterPadCart[itemId] = next;
+  }
+  renderWaiterExpressView();
+}
+
+function clearWaiterPadSelection() {
+  waiterPadCart = {};
+  renderWaiterExpressView();
+}
+
+function dispatchWaiterPadToTable(tableId) {
+  const table = state.tables.find((t) => t.id === tableId);
+  if (!table) return;
+
+  const { totalCount, totalAmount, items } = getWaiterPadSummary();
+  if (totalCount <= 0) {
+    const { totalAmount: existingTotal } = getTableSummary(table);
+    if (existingTotal > 0) {
+      expandedWaiterPendingKey = `table_${table.id}`;
+      renderWaiterExpressView();
+      if (wexpPendingListEl) {
+        wexpPendingListEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+      return;
+    }
+    showToast("Əvvəlcə məhsul seçin!", 1000);
+    return;
+  }
+
+  items.forEach((it) => {
+    table.orders[it.itemId] = (Number(table.orders[it.itemId]) || 0) + it.qty;
+  });
+
+  table.lastWaiter = currentUserRole;
+  table.updatedAt = Date.now();
+
+  saveState({ changedTableIds: [table.id] });
+
+  logAuditEvent({
+    type: "order",
+    typeLabel: "Sifariş Masaya Yazıldı",
+    tableName: table.name,
+    tableId: table.id,
+    amount: totalAmount,
+    details: items.map((i) => `${i.name} × ${i.qty}`).join(", "),
+    actorRole: currentUserRole
+  });
+
+  waiterPadCart = {};
+  isWaiterOtherDrawerOpen = false;
+  renderWaiterExpressView();
+  showToast(`${table.name}-ə yazıldı!`, 1000, true);
+}
+
+function dispatchWaiterPadToWindow(isInstantCash = false) {
+  const { totalCount, totalAmount, items } = getWaiterPadSummary();
+  if (totalCount <= 0) {
+    showToast("Əvvəlcə məhsul seçin!", 1000);
+    return;
+  }
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const closedByRoleKey = (currentUserRole === "waiter1" || currentUserRole === "waiter2") ? currentUserRole : "admin";
+
+  if (isInstantCash) {
+    const txRecord = normalizeTransactionRecord({
+      id: `tx_win_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      time: timeStr,
+      date: getBusinessDateKey(now),
+      dateTimeLabel: getShortDateTimeAz(now),
+      source: "pencere",
+      tableId: "pencere",
+      tableName: "Pəncərə",
+      total: round2(totalAmount),
+      totalAmount: round2(totalAmount),
+      paymentMethod: "cash",
+      items: items.map((it) => ({ ...it, isCustom: false })),
+      closedBy: getRoleDisplayName(closedByRoleKey),
+      closedByRole: closedByRoleKey,
+      updatedAt: Date.now()
+    });
+
+    if (!Array.isArray(state.closedBills)) state.closedBills = [];
+    state.closedBills.push(txRecord);
+
+    saveState({ newTransactions: [txRecord] });
+
+    logAuditEvent({
+      type: "bill",
+      typeLabel: "Pəncərə Satışı (Nağd)",
+      tableName: "Pəncərə",
+      tableId: "pencere",
+      amount: round2(totalAmount),
+      details: items.map((i) => `${i.name} × ${i.qty}`).join(", "),
+      actorRole: closedByRoleKey
+    });
+
+    waiterPadCart = {};
+    isWaiterOtherDrawerOpen = false;
+    updateHeaderSales();
+    renderWaiterExpressView();
+    showToast("Pəncərə - Nağd ödənildi!", 1000, true);
+  } else {
+    if (!Array.isArray(state.windowOrders)) state.windowOrders = [];
+    const orderNum = state.windowOrders.length + 1;
+    const orderRecord = {
+      id: `wo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      orderNumber: orderNum,
+      time: timeStr,
+      dateTimeLabel: getShortDateTimeAz(now),
+      items: items.map((it) => ({ ...it, isCustom: false })),
+      total: round2(totalAmount),
+      totalAmount: round2(totalAmount),
+      createdBy: getRoleDisplayName(currentUserRole),
+      createdByRole: currentUserRole,
+      updatedAt: Date.now()
+    };
+
+    state.windowOrders.push(orderRecord);
+    saveState({ syncWindowOrders: true });
+
+    logAuditEvent({
+      type: "order",
+      typeLabel: "Pəncərə Sifarişi Yaradıldı",
+      tableName: `Pəncərə #${orderNum}`,
+      tableId: "pencere",
+      amount: round2(totalAmount),
+      details: items.map((i) => `${i.name} × ${i.qty}`).join(", "),
+      actorRole: currentUserRole
+    });
+
+    waiterPadCart = {};
+    isWaiterOtherDrawerOpen = false;
+    renderWaiterExpressView();
+    showToast("Pəncərəyə yazıldı!", 1000, true);
+  }
+}
+
+function closeTableBillFromWaiterExpress(tableId, payMethod = "cash") {
+  const table = state.tables.find((t) => t.id === tableId);
+  if (!table) return;
+
+  const { totalAmount } = getTableSummary(table);
+  if (totalAmount <= 0) return;
+
+  const billItems = [];
+  MENU_CATALOG.forEach((item) => {
+    const qty = Number(table.orders[item.id]) || 0;
+    if (qty > 0) {
+      billItems.push({
+        itemId: item.id,
+        name: item.name,
+        qty,
+        price: item.price,
+        unit: item.unit,
+        total: round2(qty * item.price),
+        isCustom: false
+      });
+    }
+  });
+
+  if (Array.isArray(table.customOrders)) {
+    table.customOrders.forEach((custom) => {
+      const cQty = Number(custom.qty) || 1;
+      const cPrice = Number(custom.price) || 0;
+      billItems.push({
+        customRecordId: `sc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: custom.name,
+        qty: cQty,
+        price: cPrice,
+        unit: "ədəd",
+        total: round2(cQty * cPrice),
+        isCustom: true
+      });
+    });
+  }
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const closedByRoleKey = (currentUserRole === "waiter1" || currentUserRole === "waiter2")
+    ? currentUserRole
+    : (table.lastWaiter || "admin");
+
+  const txRecord = normalizeTransactionRecord({
+    id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    tableId: table.id,
+    tableName: table.name,
+    source: "kafe",
+    time: timeStr,
+    date: getBusinessDateKey(now),
+    dateTimeLabel: getShortDateTimeAz(now),
+    total: round2(totalAmount),
+    totalAmount: round2(totalAmount),
+    paymentMethod: payMethod === "card" ? "card" : "cash",
+    closedBy: getRoleDisplayName(closedByRoleKey),
+    closedByRole: closedByRoleKey,
+    items: billItems,
+    updatedAt: Date.now()
+  });
+
+  if (!Array.isArray(state.closedBills)) state.closedBills = [];
+  state.closedBills.push(txRecord);
+
+  table.orders = {};
+  table.customOrders = [];
+  table.lastWaiter = null;
+  table.updatedAt = Date.now();
+
+  saveState({
+    changedTableIds: [table.id],
+    newTransactions: [txRecord]
+  });
+
+  logAuditEvent({
+    type: "bill",
+    typeLabel: `Hesab Bağlandı (${payMethod === "card" ? "Kart" : "Nağd"})`,
+    tableName: table.name,
+    tableId: table.id,
+    amount: round2(totalAmount),
+    details: billItems.map((it) => `${it.name} × ${it.qty}`).join(", "),
+    actorRole: closedByRoleKey
+  });
+
+  if (expandedWaiterPendingKey === `table_${table.id}`) {
+    expandedWaiterPendingKey = null;
+  }
+
+  updateHeaderSales();
+  renderWaiterExpressView();
+  showToast(`${table.name} bağlandı!`, 1000, true);
+}
+
+function createWaiterExpressCard(def) {
+  const catItem = MENU_CATALOG.find((m) => m.id === def.id) || {
+    id: def.id,
+    name: def.label,
+    price: def.defaultPrice
+  };
+  const qty = Number(waiterPadCart[catItem.id]) || 0;
+
+  const card = document.createElement("div");
+  card.className = `wexp-item-card ${def.accent || ""} ${qty > 0 ? "is-selected" : ""}`.trim();
+  card.innerHTML = `
+    <div class="wexp-card-left">
+      <span class="wexp-card-emoji">${def.icon}</span>
+      <div class="wexp-card-meta">
+        <span class="wexp-card-name">${def.label}</span>
+        <span class="wexp-card-price">${formatMoney(catItem.price)}</span>
+      </div>
+    </div>
+    <div class="wexp-card-right">
+      ${qty > 0 ? `<button type="button" class="wexp-card-minus" aria-label="Azalt">−</button><span class="wexp-card-qty">${qty}</span>` : ""}
+    </div>
+  `;
+
+  const minusBtn = card.querySelector(".wexp-card-minus");
+  if (minusBtn) {
+    minusBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      updateWaiterPadItem(catItem.id, -1);
+    });
+  }
+
+  card.addEventListener("click", () => {
+    updateWaiterPadItem(catItem.id, 1);
+  });
+
+  return card;
+}
+
+function renderWaiterExpressView() {
+  if (!waiterExpressViewEl) return;
+
+  // 1. Ödəniş Gözləyənlər (Dolu Masalar və Pəncərə)
+  if (wexpPendingListEl) {
+    wexpPendingListEl.innerHTML = "";
+
+    const busyTables = state.tables.filter((t) => getTableSummary(t).totalAmount > 0);
+    const pendingWinOrders = Array.isArray(state.windowOrders)
+      ? state.windowOrders.filter((o) => o && !o.deleted)
+      : [];
+
+    const totalOpenCount = busyTables.length + pendingWinOrders.length;
+    if (wexpBusyCountBadgeEl) {
+      wexpBusyCountBadgeEl.textContent = `${totalOpenCount} açıq`;
+    }
+
+    if (totalOpenCount === 0) {
+      wexpPendingListEl.innerHTML = `<div class="wexp-pending-empty">Hazırda ödəniş gözləyən dolu masa yoxdur</div>`;
+    } else {
+      busyTables.forEach((table) => {
+        const { totalAmount } = getTableSummary(table);
+        const key = `table_${table.id}`;
+        const isExpanded = expandedWaiterPendingKey === key;
+
+        const activeItems = [];
+        MENU_CATALOG.forEach((m) => {
+          const q = Number(table.orders[m.id]) || 0;
+          if (q > 0) activeItems.push({ id: m.id, name: m.name, qty: q, price: m.price });
+        });
+        const summaryText = activeItems.map((i) => `${i.qty}× ${i.name}`).join(", ");
+
+        const itemEl = document.createElement("div");
+        itemEl.className = `wexp-pending-item ${isExpanded ? "expanded" : ""}`;
+
+        const chipsHtml = activeItems
+          .map(
+            (i) => `
+            <span class="wexp-mini-item-chip">
+              <span>${i.qty}× ${i.name}</span>
+              <button type="button" class="wexp-mini-chip-minus" data-item-id="${i.id}" title="1 ədəd azalt">−</button>
+            </span>
+          `
+          )
+          .join("");
+
+        itemEl.innerHTML = `
+          <div class="wexp-pending-row">
+            <div class="wexp-pending-left">
+              <span class="wexp-pending-dot"></span>
+              <span class="wexp-pending-name">${table.name} — ${formatMoney(totalAmount)}</span>
+              <span class="wexp-pending-summary">${summaryText}</span>
+            </div>
+            <div class="wexp-pending-right">
+              <span class="wexp-pending-chevron">▾</span>
+            </div>
+          </div>
+          <div class="wexp-pending-actions">
+            ${chipsHtml ? `<div class="wexp-pending-items-list">${chipsHtml}</div>` : ""}
+            <div class="wexp-pay-btn-group">
+              <button type="button" class="wexp-pay-btn wexp-pay-cash">💵 NAĞD ALINDI</button>
+              <button type="button" class="wexp-pay-btn wexp-pay-card">💳 KARTLA ALINDI</button>
+            </div>
+          </div>
+        `;
+
+        itemEl.querySelector(".wexp-pending-row").addEventListener("click", () => {
+          expandedWaiterPendingKey = isExpanded ? null : key;
+          renderWaiterExpressView();
+        });
+
+        itemEl.querySelectorAll(".wexp-mini-chip-minus").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const targetItemId = btn.getAttribute("data-item-id");
+            if (targetItemId) {
+              const cur = Number(table.orders[targetItemId]) || 0;
+              if (cur <= 1) {
+                delete table.orders[targetItemId];
+              } else {
+                table.orders[targetItemId] = cur - 1;
+              }
+              table.updatedAt = Date.now();
+              saveState({ changedTableIds: [table.id] });
+              renderWaiterExpressView();
+            }
+          });
+        });
+
+        itemEl.querySelector(".wexp-pay-cash").addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeTableBillFromWaiterExpress(table.id, "cash");
+        });
+
+        itemEl.querySelector(".wexp-pay-card").addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeTableBillFromWaiterExpress(table.id, "card");
+        });
+
+        wexpPendingListEl.appendChild(itemEl);
+      });
+
+      pendingWinOrders.forEach((ord) => {
+        const orderTotal = round2(ord.total || ord.totalAmount || 0);
+        const key = `win_${ord.id}`;
+        const isExpanded = expandedWaiterPendingKey === key;
+        const winLabel = `Pəncərə ${ord.orderNumber ? "#" + ord.orderNumber : ""}`.trim();
+        const summaryText = (ord.items || []).map((i) => `${i.qty}× ${i.name}`).join(", ");
+
+        const itemEl = document.createElement("div");
+        itemEl.className = `wexp-pending-item ${isExpanded ? "expanded" : ""}`;
+        itemEl.innerHTML = `
+          <div class="wexp-pending-row">
+            <div class="wexp-pending-left">
+              <span class="wexp-pending-dot"></span>
+              <span class="wexp-pending-name">🪟 ${winLabel} — ${formatMoney(orderTotal)}</span>
+              <span class="wexp-pending-summary">${summaryText}</span>
+            </div>
+            <div class="wexp-pending-right">
+              <span class="wexp-pending-chevron">▾</span>
+            </div>
+          </div>
+          <div class="wexp-pending-actions">
+            <div class="wexp-pay-btn-group">
+              <button type="button" class="wexp-pay-btn wexp-pay-cash">💵 NAĞD ALINDI</button>
+              <button type="button" class="wexp-pay-btn wexp-pay-card">💳 KARTLA ALINDI</button>
+            </div>
+          </div>
+        `;
+
+        itemEl.querySelector(".wexp-pending-row").addEventListener("click", () => {
+          expandedWaiterPendingKey = isExpanded ? null : key;
+          renderWaiterExpressView();
+        });
+
+        itemEl.querySelector(".wexp-pay-cash").addEventListener("click", (e) => {
+          e.stopPropagation();
+          finalizeWindowOrderPayment(ord.id, "cash");
+          renderWaiterExpressView();
+        });
+
+        itemEl.querySelector(".wexp-pay-card").addEventListener("click", (e) => {
+          e.stopPropagation();
+          finalizeWindowOrderPayment(ord.id, "card");
+          renderWaiterExpressView();
+        });
+
+        wexpPendingListEl.appendChild(itemEl);
+      });
+    }
+  }
+
+  // 2. İçkilər Bloku
+  if (wexpDrinksGridEl) {
+    wexpDrinksGridEl.innerHTML = "";
+    WAITER_EXPRESS_DRINKS.forEach((def) => {
+      wexpDrinksGridEl.appendChild(createWaiterExpressCard(def));
+    });
+  }
+
+  // 3. Yemək / Məzə Bloku + [➕ Digər Menyu]
+  if (wexpFoodGridEl) {
+    wexpFoodGridEl.innerHTML = "";
+    WAITER_EXPRESS_FOOD.forEach((def) => {
+      wexpFoodGridEl.appendChild(createWaiterExpressCard(def));
+    });
+
+    const excludedIds = new Set([
+      "qend_limon",
+      "corek",
+      ...WAITER_EXPRESS_DRINKS.map((d) => d.id),
+      ...WAITER_EXPRESS_FOOD.map((f) => f.id)
+    ]);
+    const otherItems = MENU_CATALOG.filter((m) => !excludedIds.has(m.id));
+    const otherSelectedCount = otherItems.reduce((sum, m) => sum + (Number(waiterPadCart[m.id]) || 0), 0);
+
+    const otherBtn = document.createElement("div");
+    otherBtn.className = `wexp-item-card accent-slate ${otherSelectedCount > 0 ? "is-selected" : ""}`;
+    otherBtn.innerHTML = `
+      <div class="wexp-card-left">
+        <span class="wexp-card-emoji">➕</span>
+        <div class="wexp-card-meta">
+          <span class="wexp-card-name">Digər Menyu</span>
+          <span class="wexp-card-price">${isWaiterOtherDrawerOpen ? "Bağla ▴" : "Siyahını aç ▾"}</span>
+        </div>
+      </div>
+      <div class="wexp-card-right">
+        ${otherSelectedCount > 0 ? `<span class="wexp-card-qty">${otherSelectedCount}</span>` : ""}
+      </div>
+    `;
+    otherBtn.addEventListener("click", () => {
+      isWaiterOtherDrawerOpen = !isWaiterOtherDrawerOpen;
+      renderWaiterExpressView();
+    });
+    wexpFoodGridEl.appendChild(otherBtn);
+
+    if (wexpOtherMenuDrawerEl) {
+      if (isWaiterOtherDrawerOpen) {
+        wexpOtherMenuDrawerEl.style.display = "grid";
+        wexpOtherMenuDrawerEl.innerHTML = "";
+        otherItems.forEach((item) => {
+          const q = Number(waiterPadCart[item.id]) || 0;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `wexp-other-item-btn ${q > 0 ? "is-selected" : ""}`;
+          btn.innerHTML = `
+            <span>${item.name} (${formatMoney(item.price)})</span>
+            ${q > 0 ? `<span class="wexp-card-qty">${q}</span>` : ""}
+          `;
+          btn.addEventListener("click", () => {
+            updateWaiterPadItem(item.id, 1);
+          });
+          wexpOtherMenuDrawerEl.appendChild(btn);
+        });
+      } else {
+        wexpOtherMenuDrawerEl.style.display = "none";
+      }
+    }
+  }
+
+  // 4. Aşağı Göndərmə Zolağı ("3 Məhsul = 4.00 ₼" + Masalar və Pəncərə)
+  const { totalCount, totalAmount, items } = getWaiterPadSummary();
+  if (wexpSummaryBarEl && wexpSummaryCountPriceEl && wexpSummaryItemsPreviewEl) {
+    wexpSummaryBarEl.classList.toggle("has-items", totalCount > 0);
+    wexpSummaryCountPriceEl.textContent = `${totalCount} Məhsul = ${formatMoney(totalAmount)}`;
+    wexpSummaryItemsPreviewEl.textContent =
+      totalCount > 0
+        ? items.map((i) => `${i.qty}× ${i.name}`).join(", ")
+        : "Yuxarıdan məhsullara toxunaraq seçin";
+  }
+  if (wexpClearSelectionBtn) {
+    wexpClearSelectionBtn.style.display = totalCount > 0 ? "inline-flex" : "none";
+  }
+  if (wexpDispatchSectionEl) {
+    wexpDispatchSectionEl.classList.toggle("pad-ready", totalCount > 0);
+  }
+
+  if (wexpTablesRowHallEl) {
+    wexpTablesRowHallEl.innerHTML = "";
+    const hallTables = state.tables.filter((t) => (t.group || (t.id.startsWith("heyet") ? "heyet" : "daxili")) === "daxili");
+    hallTables.forEach((t) => {
+      const { totalAmount: tAmt } = getTableSummary(t);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `wexp-dest-btn ${tAmt > 0 ? "is-busy-table" : ""}`;
+      btn.innerHTML = `
+        <span>${t.name}</span>
+        ${tAmt > 0 ? `<span class="wexp-dest-sub">${formatMoney(tAmt)}</span>` : ""}
+      `;
+      btn.addEventListener("click", () => dispatchWaiterPadToTable(t.id));
+      wexpTablesRowHallEl.appendChild(btn);
+    });
+  }
+
+  if (wexpTablesRowYardEl) {
+    wexpTablesRowYardEl.innerHTML = "";
+    const yardTables = state.tables.filter((t) => (t.group || (t.id.startsWith("heyet") ? "heyet" : "daxili")) === "heyet");
+    yardTables.forEach((t) => {
+      const { totalAmount: tAmt } = getTableSummary(t);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `wexp-dest-btn ${tAmt > 0 ? "is-busy-table" : ""}`;
+      btn.innerHTML = `
+        <span>${t.name}</span>
+        ${tAmt > 0 ? `<span class="wexp-dest-sub">${formatMoney(tAmt)}</span>` : ""}
+      `;
+      btn.addEventListener("click", () => dispatchWaiterPadToTable(t.id));
+      wexpTablesRowYardEl.appendChild(btn);
+    });
+  }
+}
+
 // EKRAN 1-in yenilənməsi
 function renderMainScreen() {
   updateHeaderSales();
+  renderWaiterExpressView();
 
   tablesGridEl.innerHTML = "";
 
@@ -5237,6 +5852,9 @@ function applyRolePermissions() {
     closeReportModal();
     closeConfirmResetModal();
     closeArchiveModal();
+    if (tableScreen && tableScreen.classList.contains("active")) {
+      closeTableScreen(true);
+    }
     setAppMode("kafe");
   }
 
@@ -6192,6 +6810,21 @@ if (waiterPayCardDirectBtn) {
     }
     setTablePaymentMethod("card");
     confirmCloseActiveTableBill();
+  });
+}
+
+// Ofisiant Sürətli POS Paneli ("Seç ➔ Masaya At ➔ Hesabı Bağla") Dinləyiciləri
+if (wexpClearSelectionBtn) {
+  wexpClearSelectionBtn.addEventListener("click", clearWaiterPadSelection);
+}
+if (wexpSendWindowPendingBtn) {
+  wexpSendWindowPendingBtn.addEventListener("click", () => {
+    dispatchWaiterPadToWindow(false);
+  });
+}
+if (wexpSendWindowCashBtn) {
+  wexpSendWindowCashBtn.addEventListener("click", () => {
+    dispatchWaiterPadToWindow(true);
   });
 }
 
