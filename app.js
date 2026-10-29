@@ -3550,7 +3550,10 @@ function computeWaiterStats(closedBillsArray) {
 // 5. GÜNÜN STATİSTİKASI EKRANI (Yalnız Admin Səlahiyyəti)
 // ============================================================================
 function openReportModal() {
-  if (currentUserRole !== "admin") return;
+  if (currentUserRole !== "admin") {
+    showToast("📊 Günün Statistikası yalnız Müdir (Admin) üçündür!");
+    return;
+  }
 
   // Başlanğıcda hesabat blokları BAĞLI (collapsed) vəziyyətdə olsun (Yığcam screenshot üçün)
   [accWaiterCard, accTableStatsCard, accSoldItemsCard, accExpensesCard].forEach((card) => {
@@ -3563,14 +3566,23 @@ function openReportModal() {
     if (hdr) hdr.setAttribute("aria-expanded", "false");
   });
 
-  renderReportModal();
-  reportModal.classList.add("open");
-  reportModal.setAttribute("aria-hidden", "false");
+  if (reportModal) {
+    reportModal.classList.add("open");
+    reportModal.setAttribute("aria-hidden", "false");
+  }
+
+  try {
+    renderReportModal();
+  } catch (err) {
+    console.error("renderReportModal xətası:", err);
+  }
 }
 
 function closeReportModal() {
-  reportModal.classList.remove("open");
-  reportModal.setAttribute("aria-hidden", "true");
+  if (reportModal) {
+    reportModal.classList.remove("open");
+    reportModal.setAttribute("aria-hidden", "true");
+  }
 }
 
 function renderReportModal() {
@@ -3750,133 +3762,139 @@ function renderReportModal() {
   }
 
   // Kafe Masaları üzrə Bağlanmış Hesablar ('✏️ Redaktə' və '✕' silmə düyməsi ilə)
-  reportTableBillsListEl.innerHTML = "";
+  if (reportTableBillsListEl) {
+    reportTableBillsListEl.innerHTML = "";
 
-  if (cafeClosedBills.length === 0) {
-    reportTableBillsListEl.innerHTML = `<div class="mini-empty">Bu gün hələ heç bir masada hesab bağlanmayıb.</div>`;
-  } else {
-    const tableMap = new Map();
-    cafeClosedBills.forEach((bill) => {
-      if (!tableMap.has(bill.tableId)) {
-        tableMap.set(bill.tableId, {
-          tableName: bill.tableName,
-          bills: [],
-          total: 0
-        });
-      }
-      const entry = tableMap.get(bill.tableId);
-      entry.bills.push(bill);
-      entry.total = round2(entry.total + bill.totalAmount);
-    });
-
-    tableMap.forEach((entry) => {
-      const groupEl = document.createElement("div");
-      groupEl.className = "report-table-group-item";
-
-      const headerDiv = document.createElement("div");
-      headerDiv.className = "report-table-group-header";
-      headerDiv.innerHTML = `
-        <span>${entry.tableName} (${entry.bills.length} hesab)</span>
-        <strong class="report-table-group-sum">${formatMoney(entry.total)}</strong>
-      `;
-      groupEl.appendChild(headerDiv);
-
-      const subListDiv = document.createElement("div");
-      subListDiv.className = "report-table-sub-list";
-
-      entry.bills.forEach((b, idx) => {
-        const itemsStr = (b.items || []).map((it) => `${it.name} × ${it.qty}`).join(", ");
-        const waiterLabel = getRoleDisplayName(b.closedByRole || b.closedBy || "waiter1");
-        const payTagClass = b.paymentMethod === "card" ? "tag-card" : "tag-cash";
-        const payTagText = b.paymentMethod === "card" ? "💳 Kart" : "💵 Nağd";
-
-        const subItem = document.createElement("div");
-        subItem.className = "report-bill-sub-item";
-        subItem.innerHTML = `
-          <div class="report-bill-sub-left">
-            <span>Hesab #${idx + 1} (${b.time}) <span class="waiter-tag-pill">${waiterLabel}</span> <span class="pay-method-tag ${payTagClass}">${payTagText}</span></span>
-            ${itemsStr ? `<span class="report-bill-sub-items">${itemsStr}</span>` : ""}
-          </div>
-          <div class="bill-right-actions">
-            <strong>${formatMoney(b.totalAmount)}</strong>
-            <button type="button" class="edit-record-btn" title="Bu çeki redaktə et">✏️ Redaktə</button>
-            <button type="button" class="delete-record-btn" title="Bu çeki sil">✕</button>
-          </div>
-        `;
-
-        subItem.querySelector(".edit-record-btn").addEventListener("click", () => {
-          openEditBillModal(b.id, null);
-        });
-
-        subItem.querySelector(".delete-record-btn").addEventListener("click", () => {
-          deleteClosedBillById(b.id);
-        });
-
-        subListDiv.appendChild(subItem);
+    if (cafeClosedBills.length === 0) {
+      reportTableBillsListEl.innerHTML = `<div class="mini-empty">Bu gün hələ heç bir masada hesab bağlanmayıb.</div>`;
+    } else {
+      const tableMap = new Map();
+      cafeClosedBills.forEach((bill) => {
+        if (!tableMap.has(bill.tableId)) {
+          tableMap.set(bill.tableId, {
+            tableName: bill.tableName,
+            bills: [],
+            total: 0
+          });
+        }
+        const entry = tableMap.get(bill.tableId);
+        entry.bills.push(bill);
+        entry.total = round2(entry.total + bill.totalAmount);
       });
 
-      groupEl.appendChild(subListDiv);
-      reportTableBillsListEl.appendChild(groupEl);
-    });
+      tableMap.forEach((entry) => {
+        const groupEl = document.createElement("div");
+        groupEl.className = "report-table-group-item";
+
+        const headerDiv = document.createElement("div");
+        headerDiv.className = "report-table-group-header";
+        headerDiv.innerHTML = `
+          <span>${entry.tableName} (${entry.bills.length} hesab)</span>
+          <strong class="report-table-group-sum">${formatMoney(entry.total)}</strong>
+        `;
+        groupEl.appendChild(headerDiv);
+
+        const subListDiv = document.createElement("div");
+        subListDiv.className = "report-table-sub-list";
+
+        entry.bills.forEach((b, idx) => {
+          const itemsStr = (b.items || []).map((it) => `${it.name} × ${it.qty}`).join(", ");
+          const waiterLabel = getRoleDisplayName(b.closedByRole || b.closedBy || "waiter1");
+          const payTagClass = b.paymentMethod === "card" ? "tag-card" : "tag-cash";
+          const payTagText = b.paymentMethod === "card" ? "💳 Kart" : "💵 Nağd";
+
+          const subItem = document.createElement("div");
+          subItem.className = "report-bill-sub-item";
+          subItem.innerHTML = `
+            <div class="report-bill-sub-left">
+              <span>Hesab #${idx + 1} (${b.time}) <span class="waiter-tag-pill">${waiterLabel}</span> <span class="pay-method-tag ${payTagClass}">${payTagText}</span></span>
+              ${itemsStr ? `<span class="report-bill-sub-items">${itemsStr}</span>` : ""}
+            </div>
+            <div class="bill-right-actions">
+              <strong>${formatMoney(b.totalAmount)}</strong>
+              <button type="button" class="edit-record-btn" title="Bu çeki redaktə et">✏️ Redaktə</button>
+              <button type="button" class="delete-record-btn" title="Bu çeki sil">✕</button>
+            </div>
+          `;
+
+          subItem.querySelector(".edit-record-btn").addEventListener("click", () => {
+            openEditBillModal(b.id, null);
+          });
+
+          subItem.querySelector(".delete-record-btn").addEventListener("click", () => {
+            deleteClosedBillById(b.id);
+          });
+
+          subListDiv.appendChild(subItem);
+        });
+
+        groupEl.appendChild(subListDiv);
+        reportTableBillsListEl.appendChild(groupEl);
+      });
+    }
   }
 
   // Kafe Satılan Məhsullar (İnventar)
-  reportSoldItemsEl.innerHTML = "";
-  const soldCatalogItems = MENU_CATALOG.filter((item) => (Number(state.soldItemsSummary[item.id]) || 0) > 0);
-  const soldCustoms = Array.isArray(state.soldCustomItems) ? state.soldCustomItems : [];
+  if (reportSoldItemsEl) {
+    reportSoldItemsEl.innerHTML = "";
+    const soldCatalogItems = MENU_CATALOG.filter((item) => (Number(state.soldItemsSummary[item.id]) || 0) > 0);
+    const soldCustoms = Array.isArray(state.soldCustomItems) ? state.soldCustomItems : [];
 
-  if (soldCatalogItems.length === 0 && soldCustoms.length === 0) {
-    reportSoldItemsEl.innerHTML = `<div class="mini-empty">Bu gün kafedə hələ bağlanmış satış yoxdur.</div>`;
-  } else {
-    soldCatalogItems.forEach((item) => {
-      const qty = Number(state.soldItemsSummary[item.id]) || 0;
-      const sum = round2(qty * item.price);
-      const row = document.createElement("div");
-      row.className = "mini-row";
-      row.innerHTML = `
-        <span>${item.name}: <strong>${qty} ${item.unit}</strong></span>
-        <strong>${formatMoney(sum)}</strong>
-      `;
-      reportSoldItemsEl.appendChild(row);
-    });
+    if (soldCatalogItems.length === 0 && soldCustoms.length === 0) {
+      reportSoldItemsEl.innerHTML = `<div class="mini-empty">Bu gün kafedə hələ bağlanmış satış yoxdur.</div>`;
+    } else {
+      soldCatalogItems.forEach((item) => {
+        const qty = Number(state.soldItemsSummary[item.id]) || 0;
+        const sum = round2(qty * item.price);
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>${item.name}: <strong>${qty} ${item.unit}</strong></span>
+          <strong>${formatMoney(sum)}</strong>
+        `;
+        reportSoldItemsEl.appendChild(row);
+      });
 
-    soldCustoms.forEach((custom) => {
-      const row = document.createElement("div");
-      row.className = "mini-row";
-      row.innerHTML = `
-        <span>${custom.name}: <strong>${custom.qty} ədəd</strong></span>
-        <strong>${formatMoney(custom.total)}</strong>
-      `;
-      reportSoldItemsEl.appendChild(row);
-    });
+      soldCustoms.forEach((custom) => {
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>${custom.name}: <strong>${custom.qty} ədəd</strong></span>
+          <strong>${formatMoney(custom.total)}</strong>
+        `;
+        reportSoldItemsEl.appendChild(row);
+      });
+    }
   }
 
   // Kafe Xərcləri Siyahısı ('✏️ Redaktə' və '✕' ilə silmək imkanı)
-  reportCafeExpensesListEl.innerHTML = "";
-  const cafeExpensesList = (state.expenses || []).filter((e) => !e.deleted && e.type !== "pencere");
-  if (cafeExpensesList.length === 0) {
-    reportCafeExpensesListEl.innerHTML = `<div class="mini-empty">Bu gün kafe xərci qeydə alınmayıb.</div>`;
-  } else {
-    cafeExpensesList.forEach((exp) => {
-      const row = document.createElement("div");
-      row.className = "mini-row";
-      row.innerHTML = `
-        <span>${exp.title} (${exp.time}):</span>
-        <div class="bill-right-actions">
-          <strong style="color:#dc2626">${formatMoney(exp.amount)}</strong>
-          <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
-          <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
-        </div>
-      `;
-      row.querySelector(".edit-record-btn").addEventListener("click", () => {
-        openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+  if (reportCafeExpensesListEl) {
+    reportCafeExpensesListEl.innerHTML = "";
+    const cafeExpensesList = (state.expenses || []).filter((e) => !e.deleted && e.type !== "pencere");
+    if (cafeExpensesList.length === 0) {
+      reportCafeExpensesListEl.innerHTML = `<div class="mini-empty">Bu gün kafe xərci qeydə alınmayıb.</div>`;
+    } else {
+      cafeExpensesList.forEach((exp) => {
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>${exp.title} (${exp.time}):</span>
+          <div class="bill-right-actions">
+            <strong style="color:#dc2626">${formatMoney(exp.amount)}</strong>
+            <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
+            <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
+          </div>
+        `;
+        row.querySelector(".edit-record-btn").addEventListener("click", () => {
+          openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+        });
+        row.querySelector(".delete-record-btn").addEventListener("click", () => {
+          deleteExpenseById(exp.id);
+          renderReportModal();
+        });
+        reportCafeExpensesListEl.appendChild(row);
       });
-      row.querySelector(".delete-record-btn").addEventListener("click", () => {
-        deleteExpenseById(exp.id);
-        renderReportModal();
-      });
-      reportCafeExpensesListEl.appendChild(row);
-    });
+    }
   }
 
   // 3. Blok B: Pəncərə Kassası
@@ -3920,59 +3938,63 @@ function renderReportModal() {
   }
 
   // Pəncərə Satılan Məhsullar (Dürmək və Peraşki Sayı — '✕' ilə silmək imkanı)
-  reportWindowSoldItemsEl.innerHTML = "";
-  const winSoldItems = WINDOW_MENU_CATALOG.filter(
-    (item) => (Number((state.windowSoldSummary || {})[item.id]) || 0) > 0
-  );
+  if (reportWindowSoldItemsEl) {
+    reportWindowSoldItemsEl.innerHTML = "";
+    const winSoldItems = WINDOW_MENU_CATALOG.filter(
+      (item) => (Number((state.windowSoldSummary || {})[item.id]) || 0) > 0
+    );
 
-  if (winSoldItems.length === 0) {
-    reportWindowSoldItemsEl.innerHTML = `<div class="mini-empty">Bu gün hələ pəncərə satışı olmayıb.</div>`;
-  } else {
-    winSoldItems.forEach((item) => {
-      const qty = Number(state.windowSoldSummary[item.id]) || 0;
-      const sum = round2(qty * item.price);
-      const row = document.createElement("div");
-      row.className = "mini-row";
-      row.innerHTML = `
-        <span>${item.name}: <strong>${qty} ədəd</strong></span>
-        <div class="bill-right-actions">
-          <strong>${formatMoney(sum)}</strong>
-          <button type="button" class="delete-record-btn" title="Bu pəncərə satışını sil">✕</button>
-        </div>
-      `;
-      row.querySelector(".delete-record-btn").addEventListener("click", () => {
-        deleteWindowSoldItem(item.id);
+    if (winSoldItems.length === 0) {
+      reportWindowSoldItemsEl.innerHTML = `<div class="mini-empty">Bu gün hələ pəncərə satışı olmayıb.</div>`;
+    } else {
+      winSoldItems.forEach((item) => {
+        const qty = Number(state.windowSoldSummary[item.id]) || 0;
+        const sum = round2(qty * item.price);
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>${item.name}: <strong>${qty} ədəd</strong></span>
+          <div class="bill-right-actions">
+            <strong>${formatMoney(sum)}</strong>
+            <button type="button" class="delete-record-btn" title="Bu pəncərə satışını sil">✕</button>
+          </div>
+        `;
+        row.querySelector(".delete-record-btn").addEventListener("click", () => {
+          deleteWindowSoldItem(item.id);
+        });
+        reportWindowSoldItemsEl.appendChild(row);
       });
-      reportWindowSoldItemsEl.appendChild(row);
-    });
+    }
   }
 
   // Pəncərə Xərcləri Siyahısı ('✏️ Redaktə' və '✕' ilə silmək imkanı)
-  reportWindowExpensesListEl.innerHTML = "";
-  const winExpensesList = (state.expenses || []).filter((e) => !e.deleted && e.type === "pencere");
-  if (winExpensesList.length === 0) {
-    reportWindowExpensesListEl.innerHTML = `<div class="mini-empty">Bu gün pəncərə xərci qeydə alınmayıb.</div>`;
-  } else {
-    winExpensesList.forEach((exp) => {
-      const row = document.createElement("div");
-      row.className = "mini-row";
-      row.innerHTML = `
-        <span>${exp.title} (${exp.time}):</span>
-        <div class="bill-right-actions">
-          <strong style="color:#dc2626">${formatMoney(exp.amount)}</strong>
-          <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
-          <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
-        </div>
-      `;
-      row.querySelector(".edit-record-btn").addEventListener("click", () => {
-        openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+  if (reportWindowExpensesListEl) {
+    reportWindowExpensesListEl.innerHTML = "";
+    const winExpensesList = (state.expenses || []).filter((e) => !e.deleted && e.type === "pencere");
+    if (winExpensesList.length === 0) {
+      reportWindowExpensesListEl.innerHTML = `<div class="mini-empty">Bu gün pəncərə xərci qeydə alınmayıb.</div>`;
+    } else {
+      winExpensesList.forEach((exp) => {
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>${exp.title} (${exp.time}):</span>
+          <div class="bill-right-actions">
+            <strong style="color:#dc2626">${formatMoney(exp.amount)}</strong>
+            <button type="button" class="edit-record-btn" title="Xərci redaktə et">✏️ Redaktə</button>
+            <button type="button" class="delete-record-btn" title="Xərci sil">✕</button>
+          </div>
+        `;
+        row.querySelector(".edit-record-btn").addEventListener("click", () => {
+          openExpenseEditModal({ isNew: false, expenseId: exp.id, archiveDayId: null });
+        });
+        row.querySelector(".delete-record-btn").addEventListener("click", () => {
+          deleteExpenseById(exp.id);
+          renderReportModal();
+        });
+        reportWindowExpensesListEl.appendChild(row);
       });
-      row.querySelector(".delete-record-btn").addEventListener("click", () => {
-        deleteExpenseById(exp.id);
-        renderReportModal();
-      });
-      reportWindowExpensesListEl.appendChild(row);
-    });
+    }
   }
 }
 
@@ -5611,11 +5633,17 @@ customItemModal.addEventListener("click", (e) => {
   if (e.target === customItemModal) closeCustomItemModal();
 });
 
-openReportBtn.addEventListener("click", openReportModal);
-closeReportModalBtn.addEventListener("click", closeReportModal);
-reportModal.addEventListener("click", (e) => {
-  if (e.target === reportModal) closeReportModal();
-});
+if (openReportBtn) {
+  openReportBtn.addEventListener("click", openReportModal);
+}
+if (closeReportModalBtn) {
+  closeReportModalBtn.addEventListener("click", closeReportModal);
+}
+if (reportModal) {
+  reportModal.addEventListener("click", (e) => {
+    if (e.target === reportModal) closeReportModal();
+  });
+}
 
 if (exportReportCsvBtn) {
   exportReportCsvBtn.addEventListener("click", () => {
