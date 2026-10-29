@@ -2835,12 +2835,12 @@ body.dark-mode .transfer-merge-title {
 /* Əsas Böyük Yaşıl Düymə: Sifarişi Masaya Yaz / Təsdiqlə */
 .save-order-btn {
   width: 100%;
-  min-height: 60px;
+  min-height: 56px;
   background: #16a34a;
   color: #ffffff;
   border: none;
   border-radius: 16px;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 900;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -2848,7 +2848,7 @@ body.dark-mode .transfer-merge-title {
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
-  transition: transform 0.08s ease, background-color 0.12s ease;
+  transition: transform 0.08s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .save-order-btn:active {
@@ -2857,34 +2857,74 @@ body.dark-mode .transfer-merge-title {
 }
 
 /* İkinci Fərqli Düymə: Yalnız Müştəri Gedəndə Hesabı Bağla (Ödəniş Modalı ilə) */
-.close-bill-btn.secondary-close-btn {
+.close-bill-btn.secondary-close-btn,
+.close-bill-btn {
   width: 100%;
-  min-height: 48px;
+  min-height: 50px;
   background: #1e293b;
   color: #f8fafc;
   border: 1.5px solid #334155;
   border-radius: 14px;
-  font-size: 0.98rem;
+  font-size: 1rem;
   font-weight: 800;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
-  transition: transform 0.08s ease, background-color 0.12s ease;
+  transition: transform 0.08s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.close-bill-btn.secondary-close-btn:active {
+.close-bill-btn:active {
   transform: scale(0.98);
   background: #0f172a;
 }
 
-.close-bill-btn.secondary-close-btn:disabled {
-  background: #e2e8f0;
-  color: #94a3b8;
-  border-color: #cbd5e1;
-  box-shadow: none;
-  cursor: not-allowed;
+.close-bill-btn:disabled,
+.save-order-btn:disabled {
+  background: #e2e8f0 !important;
+  color: #94a3b8 !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  opacity: 0.65;
+}
+
+/* Dinamik Düymə Rəng Keçidləri (DRAFT vs COMMITTED) */
+.btn-vibrant-green {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(22, 163, 74, 0.45) !important;
+  font-weight: 900 !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+}
+
+.btn-vibrant-green:active {
+  transform: scale(0.98);
+  background: #15803d !important;
+}
+
+.btn-neutral-muted {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  border: 1.5px solid #cbd5e1 !important;
+  box-shadow: none !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+}
+
+.btn-neutral-muted:active {
+  transform: scale(0.98);
+  background: #cbd5e1 !important;
+}
+
+body.dark-mode .btn-neutral-muted {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+  border-color: #334155 !important;
 }
 
 /* ============================================================================
@@ -3453,4 +3493,260 @@ body.dark-mode .receipt-scroll-area {
 body.dark-mode .audit-log-card {
   background: #18181b;
   border-color: #27272a;
+}
+
+/* ============================================================================
+   Axtarış Açılan Nəticələr (Search Overlay Dropdown)
+   ============================================================================ */
+.menu-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 2px solid #2563eb;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 4px;
+}
+
+.menu-search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.menu-search-result-item:active {
+  transform: scale(0.98);
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+body.dark-mode .menu-search-result-item:active {
+  background: #1e3a5f;
+}
+
+.search-res-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-res-name {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.search-res-cat {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.search-res-price {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #16a34a;
+}
+
+/* ============================================================================
+   GÜNÜN STATİSTİKASI VƏ VİZUAL FAİZ ZOLAĞI (SPLIT PROGRESS BAR)
+   ============================================================================ */
+.split-progress-container {
+  width: 100%;
+  margin: 12px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.split-progress-bar {
+  width: 100%;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.split-bar-cash {
+  height: 100%;
+  background: #16a34a;
+  transition: width 0.3s ease;
+}
+
+.split-bar-card {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.3s ease;
+}
+
+.split-progress-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.split-label-pill {
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.split-pill-cash {
+  color: #4ade80;
+  background: rgba(22, 163, 74, 0.25);
+}
+
+.split-pill-card {
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.25);
+}
+
+.card-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+}
+
+.quick-atm-btn {
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.3);
+  color: #bfdbfe;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.quick-atm-btn:active {
+  transform: scale(0.95);
+  background: #2563eb;
+  color: #ffffff;
+}
+
+/* ============================================================================
+   2 MƏRHƏLƏLİ TƏHLÜKƏSİZLİK KİLİDİ ('SİL' TƏSDİQİ MODALI)
+   ============================================================================ */
+.danger-lock-overlay {
+  background: rgba(15, 23, 42, 0.85) !important;
+  backdrop-filter: blur(5px);
+  z-index: 400;
+}
+
+.danger-dialog {
+  border: 2.5px solid #ef4444 !important;
+  box-shadow: 0 14px 40px rgba(239, 68, 68, 0.35) !important;
+  text-align: center;
+}
+
+.danger-icon {
+  font-size: 2.6rem;
+  margin-bottom: 6px;
+}
+
+.danger-title {
+  color: #ef4444 !important;
+  font-size: 1.25rem !important;
+  font-weight: 900 !important;
+}
+
+.danger-input-wrap {
+  margin: 14px 0 18px;
+}
+
+.danger-confirm-input {
+  width: 100%;
+  min-height: 52px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 2px solid #ef4444;
+  border-radius: 14px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.danger-confirm-input:focus {
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25);
+}
+
+body.dark-mode .danger-confirm-input {
+  background: #450a0a;
+  color: #fca5a5;
+  border-color: #ef4444;
+}
+
+/* WhatsApp Düyməsi */
+.btn-whatsapp {
+  background: #25D366 !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.3) !important;
+}
+
+.btn-whatsapp:active {
+  background: #1ebd5a !important;
+  transform: scale(0.97);
+}
+
+/* Kompakt Minimalist Cədvəllər */
+.compact-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.compact-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  gap: 8px;
+}
+
+.compact-stat-name {
+  font-weight: 700;
+  color: var(--text-main);
+  flex: 1;
+}
+
+.compact-stat-detail {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.compact-stat-val {
+  font-weight: 800;
+  color: var(--text-main);
+  white-space: nowrap;
 }

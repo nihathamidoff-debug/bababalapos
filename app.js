@@ -570,13 +570,13 @@ function loadState() {
   }
 }
 
-// Keçmiş Günlərin Arxivini oxumaq
+// Keçmiş Günlərin Arxivini oxumaq (Soft Delete qeydləri gizlədilir)
 function loadArchive() {
   try {
     const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter((item) => item && !item.isDeleted && !item.deleted) : [];
   } catch (err) {
     return [];
   }
@@ -721,10 +721,10 @@ const archiveModal = document.getElementById("archiveModal");
 const closeArchiveModalBtn = document.getElementById("closeArchiveModalBtn");
 const archiveDaysListEl = document.getElementById("archiveDaysList");
 
-// Təsdiq (Confirm) Modalı Elementləri
-const confirmResetModal = document.getElementById("confirmResetModal");
-const cancelResetBtn = document.getElementById("cancelResetBtn");
-const confirmResetBtn = document.getElementById("confirmResetBtn");
+// Təsdiq (Confirm) Modalı Elementləri (Köhnə referanslar təhlükəsizlik üçün)
+const confirmResetModal = document.getElementById("confirmResetModal") || document.getElementById("dangerConfirmModal");
+const cancelResetBtn = document.getElementById("cancelResetBtn") || document.getElementById("dangerCancelBtn");
+const confirmResetBtn = document.getElementById("confirmResetBtn") || document.getElementById("dangerExecuteBtn");
 
 // Ödəniş Metodu (Nağd / Kart) Modalı Elementləri
 const paymentMethodModal = document.getElementById("paymentMethodModal");
@@ -787,15 +787,40 @@ const auditSearchInput = document.getElementById("auditSearchInput");
 const auditFilterChips = document.querySelectorAll(".audit-filter-chips .chip-btn");
 const auditLogListEl = document.getElementById("auditLogList");
 
-// Rəsmi Çek / PDF Elementləri
+// Sürətli Axtarış Açılan Nəticələr Elementi
+const menuSearchResultsDropdown = document.getElementById("menuSearchResultsDropdown");
+
+// Rəsmi Çek / PDF / WhatsApp Elementləri
 const printReportVoucherBtn = document.getElementById("printReportVoucherBtn");
 const receiptVoucherModal = document.getElementById("receiptVoucherModal");
 const receiptVoucherModalTitle = document.getElementById("receiptVoucherModalTitle");
 const receiptVoucherDateSub = document.getElementById("receiptVoucherDateSub");
 const closeReceiptVoucherBtn = document.getElementById("closeReceiptVoucherBtn");
 const printReceiptDocBtn = document.getElementById("printReceiptDocBtn");
-const downloadReceiptCsvBtn = document.getElementById("downloadReceiptCsvBtn");
+const copyWhatsAppVoucherBtn = document.getElementById("copyWhatsAppVoucherBtn");
 const receiptVoucherPaper = document.getElementById("receiptVoucherPaper");
+
+// Günün Statistikası Başlıq və Vizual Faiz Zolağı Elementləri
+const reportGrandTotalAmount = document.getElementById("reportGrandTotalAmount");
+const splitProgressCash = document.getElementById("splitProgressCash");
+const splitProgressCard = document.getElementById("splitProgressCard");
+const splitLabelCash = document.getElementById("splitLabelCash");
+const splitLabelCard = document.getElementById("splitLabelCard");
+const quickAtmTransferBtn = document.getElementById("quickAtmTransferBtn");
+
+// 2 Mərhələli Təhlükəsizlik Kilidi ('SİL') Elementləri
+const dangerConfirmModal = document.getElementById("dangerConfirmModal");
+const dangerConfirmTitle = document.getElementById("dangerConfirmTitle");
+const dangerConfirmText = document.getElementById("dangerConfirmText");
+const dangerConfirmInput = document.getElementById("dangerConfirmInput");
+const dangerCancelBtn = document.getElementById("dangerCancelBtn");
+const dangerExecuteBtn = document.getElementById("dangerExecuteBtn");
+
+// Sadə Kartdan Nağda Keçir Modalı Elementləri
+const quickAtmModal = document.getElementById("quickAtmModal");
+const quickAtmInput = document.getElementById("quickAtmInput");
+const cancelQuickAtmBtn = document.getElementById("cancelQuickAtmBtn");
+const confirmQuickAtmBtn = document.getElementById("confirmQuickAtmBtn");
 
 // Hesabat Accordion Elementləri
 const accWaiterCard = document.getElementById("accWaiterCard");
@@ -808,10 +833,11 @@ const accTableStatsHeader = document.getElementById("accTableStatsHeader");
 const accTableStatsContent = document.getElementById("accTableStatsContent");
 const accTableStatsBadge = document.getElementById("accTableStatsBadge");
 
-const accSalesCard = document.getElementById("accSalesCard");
-const accSalesHeader = document.getElementById("accSalesHeader");
-const accSalesContent = document.getElementById("accSalesContent");
-const accSalesBadge = document.getElementById("accSalesBadge");
+const accSoldItemsCard = document.getElementById("accSoldItemsCard");
+const accSoldItemsHeader = document.getElementById("accSoldItemsHeader");
+const accSoldItemsContent = document.getElementById("accSoldItemsContent");
+const accSoldItemsBadge = document.getElementById("accSoldItemsBadge");
+const reportAllSoldItemsList = document.getElementById("reportAllSoldItemsList");
 
 const accExpensesCard = document.getElementById("accExpensesCard");
 const accExpensesHeader = document.getElementById("accExpensesHeader");
@@ -1265,16 +1291,99 @@ function openTableScreen(tableId) {
   currentTeaPrice = 2.00;
   if (menuSearchInput) menuSearchInput.value = "";
   if (clearMenuSearchBtn) clearMenuSearchBtn.style.display = "none";
+  if (menuSearchResultsDropdown) {
+    menuSearchResultsDropdown.style.display = "none";
+    menuSearchResultsDropdown.innerHTML = "";
+  }
   mainScreen.classList.remove("active");
   tableScreen.classList.add("active");
   tableScreen.setAttribute("aria-hidden", "false");
   renderTableScreen();
 }
 
+// Masadakı sifarişin təsdiqlənməmiş qaralama (draft) olub-olmadığını yoxlamaq
+function isTableOrderDraftDirty(table) {
+  if (!activeTableCommittedSnapshot || !table) return false;
+  const currentOrders = table.orders || {};
+  const snapOrders = activeTableCommittedSnapshot.orders || {};
+  const allOrderKeys = new Set([...Object.keys(currentOrders), ...Object.keys(snapOrders)]);
+  for (const k of allOrderKeys) {
+    if ((Number(currentOrders[k]) || 0) !== (Number(snapOrders[k]) || 0)) {
+      return true;
+    }
+  }
+  const currentCustom = table.customOrders || [];
+  const snapCustom = activeTableCommittedSnapshot.customOrders || [];
+  if (currentCustom.length !== snapCustom.length) return true;
+  for (let i = 0; i < currentCustom.length; i++) {
+    if (
+      currentCustom[i].id !== snapCustom[i].id ||
+      currentCustom[i].qty !== snapCustom[i].qty ||
+      currentCustom[i].price !== snapCustom[i].price ||
+      currentCustom[i].name !== snapCustom[i].name
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Düymə Vəziyyətləri və Canlı Rəng Keçidi (Draft = Yaşıl Təsdiqlə / Committed = Yaşıl Hesabı Bağla)
+function updateTableActionButtonsState(table) {
+  if (!table || !saveOrderBtn || !closeBillBtn) return;
+  const isDirty = isTableOrderDraftDirty(table);
+  const { totalAmount, totalCount } = getTableSummary(table);
+
+  if (isDirty) {
+    // Masada təsdiqlənməmiş yeni məhsul (draft) olduqda:
+    // Düymə "💾 SİFARİŞİ TƏSDİQLƏ" mətni ilə canlı YAŞIL olur; "💳 HESABI BAĞLA" passiv/boz qalır.
+    saveOrderBtn.textContent = totalCount > 0
+      ? `💾 SİFARİŞİ TƏSDİQLƏ (${totalCount} MƏHSUL)`
+      : `💾 SİFARİŞİ TƏSDİQLƏ (MASAYA YAZ)`;
+    saveOrderBtn.className = "save-order-btn btn-vibrant-green";
+    saveOrderBtn.disabled = false;
+
+    closeBillBtn.className = "close-bill-btn btn-neutral-muted";
+    closeBillBtn.disabled = totalAmount <= 0;
+  } else {
+    // Təsdiqlənmiş vəziyyət:
+    if (totalAmount > 0) {
+      // Sifariş təsdiqlənib masaya yazıldıqdan sonra:
+      // Sifariş düyməsi "➕ Sifarişi əlavə et" olaraq passiv/boz rəngə keçir;
+      // "💳 HESABI BAĞLA" düyməsi dərhal canlı YAŞIL rəngə boyanır!
+      saveOrderBtn.textContent = "➕ Sifarişi əlavə et";
+      saveOrderBtn.className = "save-order-btn btn-neutral-muted";
+      saveOrderBtn.disabled = false;
+
+      closeBillBtn.className = "close-bill-btn btn-vibrant-green";
+      closeBillBtn.disabled = false;
+    } else {
+      // Tamamilə boş masa
+      saveOrderBtn.textContent = "💾 SİFARİŞİ TƏSDİQLƏ (MASAYA YAZ)";
+      saveOrderBtn.className = "save-order-btn btn-neutral-muted";
+      saveOrderBtn.disabled = true;
+
+      closeBillBtn.className = "close-bill-btn btn-neutral-muted";
+      closeBillBtn.disabled = true;
+    }
+  }
+
+  if (openTransferTableBtn) {
+    openTransferTableBtn.disabled = totalAmount <= 0;
+  }
+}
+
 // Sifarişi Masaya Yaz / Təsdiqlə (YALNIZ bu düyməyə basıldıqda masa statusu "dolu"ya çevrilir və Firebase-ə yazılır)
 function confirmAndSaveActiveTableOrder() {
   const table = state.tables.find((t) => t.id === activeTableId);
   if (!table) return;
+
+  const isDirty = isTableOrderDraftDirty(table);
+  if (!isDirty) {
+    // Əgər artıq təsdiqlənibsə və "➕ Sifarişi əlavə et" basılıbsa, axtarışı fokusla
+    if (menuSearchInput) menuSearchInput.focus();
+    return;
+  }
 
   const { totalCount, totalAmount } = getTableSummary(table);
   table.lastWaiter = currentUserRole;
@@ -1292,8 +1401,13 @@ function confirmAndSaveActiveTableOrder() {
     actorRole: currentUserRole
   });
 
-  activeTableCommittedSnapshot = null; // Təsdiqləndiyi üçün dəyişikliklər qorunur
-  closeTableScreen(false);
+  // Təsdiqlənmiş yeni vəziyyəti snapshot-a köçürürük
+  activeTableCommittedSnapshot = {
+    orders: { ...table.orders },
+    customOrders: (table.customOrders || []).map((o) => ({ ...o }))
+  };
+
+  renderTableScreen();
   showToast(totalCount > 0 ? `💾 ${table.name} sifarişi yazıldı (${formatMoney(totalAmount)})` : `${table.name} saxlanıldı`);
 }
 
@@ -1301,7 +1415,7 @@ function confirmAndSaveActiveTableOrder() {
 function closeTableScreen(forceDiscardDraft = true) {
   if (forceDiscardDraft && activeTableCommittedSnapshot && activeTableId) {
     const table = state.tables.find((t) => t.id === activeTableId);
-    if (table) {
+    if (table && isTableOrderDraftDirty(table)) {
       table.orders = { ...activeTableCommittedSnapshot.orders };
       table.customOrders = (activeTableCommittedSnapshot.customOrders || []).map((o) => ({ ...o }));
     }
@@ -1311,6 +1425,10 @@ function closeTableScreen(forceDiscardDraft = true) {
   activeCategory = null;
   if (menuSearchInput) menuSearchInput.value = "";
   if (clearMenuSearchBtn) clearMenuSearchBtn.style.display = "none";
+  if (menuSearchResultsDropdown) {
+    menuSearchResultsDropdown.style.display = "none";
+    menuSearchResultsDropdown.innerHTML = "";
+  }
   tableScreen.classList.remove("active");
   tableScreen.setAttribute("aria-hidden", "true");
   mainScreen.classList.add("active");
@@ -1517,15 +1635,7 @@ function renderTableScreen() {
   activeTableBadgeEl.className = `table-badge ${isBusy ? "badge-busy" : "badge-empty"}`;
   orderItemCountEl.textContent = `${totalCount} məhsul`;
   activeTableTotalEl.textContent = formatMoney(totalAmount);
-  closeBillBtn.disabled = !isBusy;
-  if (saveOrderBtn) {
-    saveOrderBtn.textContent = totalCount > 0
-      ? `💾 SİFARİŞİ TƏSDİQLƏ (${totalCount} MƏHSUL)`
-      : `💾 SİFARİŞİ TƏSDİQLƏ (MASAYA YAZ)`;
-  }
-  if (openTransferTableBtn) {
-    openTransferTableBtn.disabled = !isBusy;
-  }
+  updateTableActionButtonsState(table);
 
   // Sifariş siyahısını qurmaq
   orderListEl.innerHTML = "";
@@ -2283,18 +2393,34 @@ function saveEditedBillChanges() {
 
 function deleteClosedBillById(billId) {
   if (currentUserRole !== "admin") return;
+  const bill = (state.closedBills || []).find((b) => b.id === billId);
+  if (!bill) return;
 
+  openDangerConfirmModal({
+    title: "Bağlanmış Çeki Sil",
+    text: `"${bill.tableName || "Çek"}" üzrə <strong>${formatMoney(bill.total || 0)}</strong> məbləğindəki çek silinəcək. Bu əməliyyat geri qaytarılmır!<br><br>Təsdiq üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:`,
+    buttonText: "🗑 Bəli, Çeki Sil",
+    onConfirm: () => doDeleteClosedBill(billId)
+  });
+}
+
+function doDeleteClosedBill(billId) {
   const billIdx = (state.closedBills || []).findIndex((b) => b.id === billId);
   if (billIdx === -1) return;
 
   const deletedBill = state.closedBills[billIdx];
+  deletedBill.deleted = true;
+  deletedBill.isDeleted = true;
+  deletedBill.deletedAt = Date.now();
+  deletedBill.deletedBy = currentUserRole;
+
   state.closedBills.splice(billIdx, 1);
   saveState({ deletedTransactionIds: [billId] });
 
   logAuditEvent({
     type: "BILL_DELETED",
     category: "kassa",
-    actionTitle: "Çek Silindi",
+    actionTitle: "Çek Silindi (Soft Delete)",
     tableName: deletedBill ? (deletedBill.tableName || "Çek") : "Çek",
     amount: deletedBill ? (deletedBill.total || 0) : 0,
     details: `${deletedBill ? (deletedBill.tableName || "Çek") : "Çek"} silindi: ${deletedBill ? deletedBill.total : 0} ₼ (${deletedBill && deletedBill.paymentMethod === "card" ? "Kart" : "Nağd"}). Məhsullar: ${deletedBill && Array.isArray(deletedBill.items) ? deletedBill.items.map((it) => `${it.qty || 1}x ${it.name}`).join(", ") : ""}`,
@@ -2303,6 +2429,7 @@ function deleteClosedBillById(billId) {
   });
 
   refreshAllActiveViews();
+  showToast("Çek uğurla silindi.");
 }
 
 // Pəncərə satışından test məhsul qeydini silmək (Yalnız Admin)
@@ -3124,15 +3251,15 @@ function renderReceiptVoucher(targetShift = state) {
 
   receiptVoucherPaper.innerHTML = `
     <div class="receipt-paper-header">
-      <h2 class="receipt-paper-title">BABA BALA ÇAY EVİ</h2>
-      <p class="receipt-paper-sub">RƏSMİ GÜNLÜK KASSA HESABATI</p>
+      <h2 class="receipt-paper-title">BABA BALA KAFE</h2>
+      <p class="receipt-paper-sub">SATIŞ VƏ KASSA HESABATI</p>
       <p class="receipt-paper-sub">${dateLabel}</p>
     </div>
 
     <hr class="receipt-divider-dashed">
 
     <div class="receipt-table-line">
-      <span>Çap Tarixi:</span>
+      <span>Tarix və Saat:</span>
       <span>${getShortDateTimeAz()}</span>
     </div>
     <div class="receipt-table-line">
@@ -3142,16 +3269,16 @@ function renderReceiptVoucher(targetShift = state) {
 
     <hr class="receipt-divider-dashed">
 
-    <div class="receipt-section-heading">🍽 SATILAN MƏHSULLAR (İNVƏNTAR)</div>
+    <div class="receipt-section-heading">🍽 SATILAN MƏHSULLAR</div>
     <div class="receipt-items-table">
       ${soldRows.length > 0 ? soldRows.join("") : '<div class="receipt-table-line"><span>Satış qeydə alınmayıb</span><span>0.00 ₼</span></div>'}
     </div>
 
     <hr class="receipt-divider-dashed">
 
-    <div class="receipt-section-heading">💳 ÖDƏNİŞ VƏ SATIŞ BÖLGÜSÜ</div>
+    <div class="receipt-section-heading">💳 SATIŞ VƏ ÖDƏNİŞ BÖLGÜSÜ</div>
     <div class="receipt-table-line bold">
-      <span>Toplam Satış (Brutto):</span>
+      <span>Ümumi Satış (Brutto):</span>
       <span>${formatMoney(grandGross)}</span>
     </div>
     <div class="receipt-table-line">
@@ -3171,7 +3298,7 @@ function renderReceiptVoucher(targetShift = state) {
 
     <hr class="receipt-divider-dashed">
 
-    <div class="receipt-section-heading">💸 KASSA XƏRCLƏRİ</div>
+    <div class="receipt-section-heading">💸 GÜNLÜK XƏRCLƏR</div>
     ${expRows || '<div class="receipt-table-line"><span>Xərc olmayıb</span><span>0.00 ₼</span></div>'}
     <div class="receipt-table-line bold" style="margin-top:6px;">
       <span>Toplam Xərclər:</span>
@@ -3186,7 +3313,7 @@ function renderReceiptVoucher(targetShift = state) {
       <span>${formatMoney(breakdown.grandTotalNet)}</span>
     </div>
     <div class="receipt-table-line bold">
-      <span>💵 Əldə Olan Nağd Pul (Kassa):</span>
+      <span>💵 Əldə Olan Nağd Pul:</span>
       <span>${formatMoney(breakdown.cashOnHand)}</span>
     </div>
     <div class="receipt-table-line bold">
@@ -3198,6 +3325,91 @@ function renderReceiptVoucher(targetShift = state) {
       *** BABA BALA POS SİSTEMİ ***
     </div>
   `;
+}
+
+function copyWhatsAppVoucherText(targetShift = state) {
+  recalculateShiftTotalsFromLedger(targetShift);
+  const breakdown = getCashAndCardBreakdown(targetShift);
+  const dateLabel = targetShift.fullDate || targetShift.date || targetShift.shiftFullDate || getFormattedBusinessDateAz();
+
+  const itemLines = [];
+  const soldMap = targetShift.soldItemsSummary || {};
+  MENU_CATALOG.forEach((it) => {
+    const qty = Number(soldMap[it.id]) || 0;
+    if (qty > 0) {
+      const sum = round2(qty * it.price);
+      itemLines.push(`• ${it.name}: ${qty} ${it.unit} — ${sum.toFixed(2)} ₼`);
+    }
+  });
+
+  (targetShift.soldCustomItems || []).forEach((c) => {
+    itemLines.push(`• ${c.name}: ${c.qty || 1} ədəd — ${Number(c.total || 0).toFixed(2)} ₼`);
+  });
+
+  const winMap = targetShift.windowSoldSummary || {};
+  WINDOW_MENU_CATALOG.forEach((it) => {
+    const qty = Number(winMap[it.id]) || 0;
+    if (qty > 0) {
+      const sum = round2(qty * it.price);
+      itemLines.push(`• [Pəncərə] ${it.name}: ${qty} ədəd — ${sum.toFixed(2)} ₼`);
+    }
+  });
+
+  const activeExps = (targetShift.expenses || []).filter((e) => !e.deleted && !e.isDeleted);
+  const expLines = activeExps.map((e) => `• ${e.title}: -${Number(e.amount).toFixed(2)} ₼`);
+  const totalGross = round2(breakdown.totalSales || (breakdown.grossCashSales + breakdown.grossCardSales));
+
+  const text = [
+    `📊 *BABABALA KAFE — SATIŞ VƏ KASSA HESABATI*`,
+    `📅 *Tarix:* ${dateLabel}`,
+    `🕒 *Saat:* ${getShortDateTimeAz()}`,
+    `👤 *Tərtib Edən:* ${getRoleDisplayName(currentUserRole)}`,
+    `----------------------------------------`,
+    `🍽 *SATILAN MƏHSULLAR:*`,
+    itemLines.length > 0 ? itemLines.join("\n") : "• Satış qeydə alınmayıb",
+    `----------------------------------------`,
+    `💳 *SATIŞ VƏ ÖDƏNİŞ BÖLGÜSÜ:*`,
+    `💰 Ümumi Satış: ${formatMoney(totalGross)}`,
+    `💵 Nağd Satış: ${formatMoney(breakdown.grossCashSales)}`,
+    `💳 Kart Satışı: ${formatMoney(breakdown.grossCardSales)}`,
+    breakdown.atmWithdrawnTotal > 0 ? `🏧 ATM Nağdlaşdırma: +${formatMoney(breakdown.atmWithdrawnTotal)}` : null,
+    `----------------------------------------`,
+    `💸 *GÜNLÜK XƏRCLƏR:*`,
+    expLines.length > 0 ? expLines.join("\n") : "• Xərc olmayıb",
+    `🔴 Toplam Xərc: -${formatMoney(breakdown.totalExpenses)}`,
+    `----------------------------------------`,
+    `⭐ *XALİS KASSA:* ${formatMoney(breakdown.grandTotalNet)}`,
+    `💵 Əldə Olan Nağd Pul: ${formatMoney(breakdown.cashOnHand)}`,
+    `💳 Bank Kartında Qalan: ${formatMoney(breakdown.cardRemaining)}`,
+    `----------------------------------------`,
+    `_BabaBala POS sistemi ilə avtomatik tərtib edilmişdir._`
+  ].filter(Boolean).join("\n");
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast("📋 Mətn WhatsApp üçün kopyalandı!");
+    }).catch(() => {
+      fallbackCopyText(text);
+    });
+  } else {
+    fallbackCopyText(text);
+  }
+}
+
+function fallbackCopyText(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+    showToast("📋 Mətn WhatsApp üçün kopyalandı!");
+  } catch (err) {
+    showToast("Kopyalama xətası");
+  }
+  document.body.removeChild(ta);
 }
 
 function openReceiptVoucherModal(targetShift = state) {
@@ -3216,17 +3428,21 @@ function closeReceiptVoucherModal() {
   }
 }
 
-// Accordion Açılıb-Bağlanma İdarəetməsi (4 Kart)
+// Accordion Açılıb-Bağlanma İdarəetməsi (4 Kart — Default Olaraq Hamısı Bağlı Açılır)
 function initReportAccordions() {
   const accConfigs = [
     { header: accWaiterHeader, card: accWaiterCard, content: accWaiterContent },
     { header: accTableStatsHeader, card: accTableStatsCard, content: accTableStatsContent },
-    { header: accSalesHeader, card: accSalesCard, content: accSalesContent },
+    { header: accSoldItemsHeader, card: accSoldItemsCard, content: accSoldItemsContent },
     { header: accExpensesHeader, card: accExpensesCard, content: accExpensesContent }
   ];
 
   accConfigs.forEach(({ header, card, content }) => {
     if (!header || !card || !content) return;
+    card.classList.remove("open");
+    header.setAttribute("aria-expanded", "false");
+    content.style.display = "none";
+
     header.onclick = () => {
       const isOpen = card.classList.contains("open");
       card.classList.toggle("open", !isOpen);
@@ -3331,19 +3547,19 @@ function computeWaiterStats(closedBillsArray) {
 }
 
 // ============================================================================
-// 5. GÜNÜN SONU / KASSA HESABATI EKRANI (Yalnız Admin Səlahiyyəti)
+// 5. GÜNÜN STATİSTİKASI EKRANI (Yalnız Admin Səlahiyyəti)
 // ============================================================================
 function openReportModal() {
   if (currentUserRole !== "admin") return;
 
   // Başlanğıcda hesabat blokları BAĞLI (collapsed) vəziyyətdə olsun (Yığcam screenshot üçün)
-  [accWaiterCard, accTableStatsCard, accSalesCard, accExpensesCard].forEach((card) => {
+  [accWaiterCard, accTableStatsCard, accSoldItemsCard, accExpensesCard].forEach((card) => {
     if (card) card.classList.remove("open");
   });
-  [accWaiterContent, accTableStatsContent, accSalesContent, accExpensesContent].forEach((content) => {
+  [accWaiterContent, accTableStatsContent, accSoldItemsContent, accExpensesContent].forEach((content) => {
     if (content) content.style.display = "none";
   });
-  [accWaiterHeader, accTableStatsHeader, accSalesHeader, accExpensesHeader].forEach((hdr) => {
+  [accWaiterHeader, accTableStatsHeader, accSoldItemsHeader, accExpensesHeader].forEach((hdr) => {
     if (hdr) hdr.setAttribute("aria-expanded", "false");
   });
 
@@ -3373,24 +3589,39 @@ function renderReportModal() {
   const winExpenses = breakdown.winExpenses;
   const winNetCash = round2(winGrossSales - winExpenses);
 
-  // Ümumi Yekun Xalis Kassa
+  // Ümumi Yekun Xalis Kassa və Dövriyyə
   const grandNetCash = round2(cafeNetCash + winNetCash);
+  const totalGrossSales = round2(breakdown.totalSales || (breakdown.grossCashSales + breakdown.grossCardSales));
 
-  // 1. Başlıq Banneri və 3-lü Kassa Bölgüsü (💵 Əldə Olan Nağd / 💳 Kartda Qalan / 💰 Ümumi Cəm)
+  // 1. Başlıq Hero: Ümumi Kassa Dövriyyəsi
+  if (reportGrandTotalAmount) reportGrandTotalAmount.textContent = formatMoney(totalGrossSales);
   if (reportGrandNetCashEl) reportGrandNetCashEl.textContent = formatMoney(grandNetCash);
   if (reportGrandBreakdownEl) {
-    reportGrandBreakdownEl.textContent = `Kafe Xalis: ${formatMoney(cafeNetCash)}  |  Pəncərə Xalis: ${formatMoney(winNetCash)}`;
+    reportGrandBreakdownEl.textContent = `Xalis Kassa: ${formatMoney(breakdown.grandTotalNet)}  |  Xərclər: -${formatMoney(breakdown.totalExpenses)}`;
   }
+
+  // 2. Vizual Faiz Zolağı (Split Progress Bar)
+  let cashPct = 100;
+  let cardPct = 0;
+  if (totalGrossSales > 0) {
+    cashPct = Math.round((breakdown.grossCashSales / totalGrossSales) * 100);
+    cardPct = 100 - cashPct;
+  }
+  if (splitProgressCash) splitProgressCash.style.width = `${cashPct}%`;
+  if (splitProgressCard) splitProgressCard.style.width = `${cardPct}%`;
+  if (splitLabelCash) splitLabelCash.textContent = `💵 Nağd: ${formatMoney(breakdown.grossCashSales)} (%${cashPct})`;
+  if (splitLabelCard) splitLabelCard.textContent = `💳 Kart: ${formatMoney(breakdown.grossCardSales)} (%${cardPct})`;
+
+  // 3. Təmizlənmiş 2-li Kassa Qutusu (Əldə Olan Nağd / Kartda Qalan)
   if (reportCashOnHandEl) reportCashOnHandEl.textContent = formatMoney(breakdown.cashOnHand);
   if (reportCardRemainingEl) reportCardRemainingEl.textContent = formatMoney(breakdown.cardRemaining);
   if (reportGrandTotalBoxEl) reportGrandTotalBoxEl.textContent = formatMoney(breakdown.grandTotalNet);
 
   // Accordion Başlıqlarındakı İndikator / Cəm Məlumatları
-  if (accSalesBadge) accSalesBadge.textContent = `Xalis: ${formatMoney(grandNetCash)}`;
-  if (accExpensesBadge) accExpensesBadge.textContent = `Cəmi: ${formatNegativeMoney(breakdown.totalExpenses)}`;
+  if (accExpensesBadge) accExpensesBadge.textContent = `Cəmi: -${formatMoney(breakdown.totalExpenses)}`;
 
   // ATM Nağdlaşdırma Tarixçəsi
-  const atmList = Array.isArray(state.atmTransfers) ? state.atmTransfers.filter((a) => !a.deleted) : [];
+  const atmList = Array.isArray(state.atmTransfers) ? state.atmTransfers.filter((a) => !a.deleted && !a.isDeleted) : [];
   if (reportAtmSectionEl && reportAtmTransfersListEl) {
     if (atmList.length === 0) {
       reportAtmSectionEl.style.display = "none";
@@ -3416,16 +3647,72 @@ function renderReportModal() {
   }
 
   // Ofisiantlar Üzrə Gündəlik Dövriyyə
-  const allActiveTx = Array.isArray(state.closedBills) ? state.closedBills.filter((b) => !b.deleted) : [];
+  const allActiveTx = Array.isArray(state.closedBills) ? state.closedBills.filter((b) => !b.deleted && !b.isDeleted) : [];
   const cafeClosedBills = allActiveTx.filter((b) => b.source !== "pencere" && b.tableId !== "pencere");
   const windowTransactions = allActiveTx.filter((b) => b.source === "pencere" || b.tableId === "pencere");
 
-  // Masalar Üzrə Hesabat (15 Masa & Pəncərə)
+  // Masalar Üzrə Hesabat (15 Masa & Pəncərə — Kompakt Cədvəl)
   if (reportPerTableStatsListEl) {
-    renderPerTableStatsGrid(reportPerTableStatsListEl, allActiveTx);
+    reportPerTableStatsListEl.innerHTML = "";
+    const tableStats = computePerTableStats(allActiveTx);
+    let activeTableCount = 0;
+    tableStats.forEach((t) => {
+      if (t.count === 0 && t.total === 0) return;
+      activeTableCount++;
+      const row = document.createElement("div");
+      row.className = "compact-stat-row";
+      row.innerHTML = `
+        <span class="compact-stat-name">${t.name}</span>
+        <span class="compact-stat-detail">${t.count} çek (${formatMoney(t.cash)} N / ${formatMoney(t.card)} K)</span>
+        <strong class="compact-stat-val">${formatMoney(t.total)}</strong>
+      `;
+      reportPerTableStatsListEl.appendChild(row);
+    });
+    if (activeTableCount === 0) {
+      reportPerTableStatsListEl.innerHTML = `<div class="mini-empty">Bu gün hələ heç bir masada hesab bağlanmayıb.</div>`;
+    }
+    if (accTableStatsBadge) {
+      accTableStatsBadge.textContent = `${activeTableCount} masa (${allActiveTx.length} çek)`;
+    }
   }
-  if (accTableStatsBadge) {
-    accTableStatsBadge.textContent = `15 masa (${allActiveTx.length} satış)`;
+
+  // Satılan Bütün Məhsullar (Nələr satıldı?) — Kompakt Minimalist Cədvəl
+  if (reportAllSoldItemsList) {
+    reportAllSoldItemsList.innerHTML = "";
+    const allSoldRows = [];
+    MENU_CATALOG.forEach((item) => {
+      const qty = Number(state.soldItemsSummary[item.id]) || 0;
+      if (qty > 0) {
+        allSoldRows.push({ name: item.name, qty, unit: item.unit, price: item.price, total: round2(qty * item.price) });
+      }
+    });
+    (state.soldCustomItems || []).forEach((c) => {
+      allSoldRows.push({ name: c.name, qty: c.qty || 1, unit: "ədəd", price: c.price, total: round2(c.total || 0) });
+    });
+    WINDOW_MENU_CATALOG.forEach((item) => {
+      const qty = Number(state.windowSoldSummary[item.id]) || 0;
+      if (qty > 0) {
+        allSoldRows.push({ name: `[Pəncərə] ${item.name}`, qty, unit: "ədəd", price: item.price, total: round2(qty * item.price) });
+      }
+    });
+
+    if (allSoldRows.length === 0) {
+      reportAllSoldItemsList.innerHTML = `<div class="mini-empty">Bu gün hələ heç bir satış qeydə alınmayıb.</div>`;
+    } else {
+      allSoldRows.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "compact-stat-row";
+        row.innerHTML = `
+          <span class="compact-stat-name">${item.name}</span>
+          <span class="compact-stat-detail">${item.qty} ${item.unit} × ${formatMoney(item.price)}</span>
+          <strong class="compact-stat-val">${formatMoney(item.total)}</strong>
+        `;
+        reportAllSoldItemsList.appendChild(row);
+      });
+    }
+    if (accSoldItemsBadge) {
+      accSoldItemsBadge.textContent = `${allSoldRows.length} çeşid`;
+    }
   }
 
   if (reportWaiterStatsListEl) {
@@ -3762,15 +4049,61 @@ function checkAndExecuteAutoEndDay() {
   }
 }
 
+// ============================================================================
+// 2 MƏRHƏLƏLİ TƏHLÜKƏSİZLİK KİLİDİ ('SİL' TƏSDİQİ İLƏ)
+// ============================================================================
+let pendingDangerAction = null;
+
+function openDangerConfirmModal({ title, text, buttonText, onConfirm }) {
+  if (!dangerConfirmModal) return;
+  pendingDangerAction = onConfirm;
+
+  if (dangerConfirmTitle) {
+    dangerConfirmTitle.innerHTML = title || "DİQQƏT: Bu əməliyyat geri qaytarılmır!";
+  }
+  if (dangerConfirmText) {
+    dangerConfirmText.innerHTML = text || "Bu əməliyyatı təsdiqləmək üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:";
+  }
+  if (dangerExecuteBtn) {
+    dangerExecuteBtn.innerHTML = buttonText || "🗑 Bəli, Sil";
+    dangerExecuteBtn.disabled = true;
+  }
+  if (dangerConfirmInput) {
+    dangerConfirmInput.value = "";
+  }
+
+  dangerConfirmModal.classList.add("open");
+  dangerConfirmModal.setAttribute("aria-hidden", "false");
+  setTimeout(() => {
+    if (dangerConfirmInput) dangerConfirmInput.focus();
+  }, 100);
+}
+
+function closeDangerConfirmModal() {
+  if (!dangerConfirmModal) return;
+  dangerConfirmModal.classList.remove("open");
+  dangerConfirmModal.setAttribute("aria-hidden", "true");
+  pendingDangerAction = null;
+  if (dangerConfirmInput) {
+    dangerConfirmInput.value = "";
+  }
+  if (dangerExecuteBtn) {
+    dangerExecuteBtn.disabled = true;
+  }
+}
+
 function openConfirmResetModal() {
   if (currentUserRole !== "admin") return;
-  confirmResetModal.classList.add("open");
-  confirmResetModal.setAttribute("aria-hidden", "false");
+  openDangerConfirmModal({
+    title: "Günü Bağla və Sıfırla",
+    text: "Cari günün hesabatı arxivə göndəriləcək və bütün masalar/kassa sıfırlanacaq. Bu əməliyyat geri qaytarılmır!<br><br>Təsdiq üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:",
+    buttonText: "🔒 Bəli, Günü Bağla və Sıfırla",
+    onConfirm: executeEndDayAndReset
+  });
 }
 
 function closeConfirmResetModal() {
-  confirmResetModal.classList.remove("open");
-  confirmResetModal.setAttribute("aria-hidden", "true");
+  closeDangerConfirmModal();
 }
 
 function executeEndDayAndReset() {
@@ -3795,10 +4128,98 @@ function executeEndDayAndReset() {
   state = createDefaultState();
   saveState({ resetShift: true });
 
-  closeConfirmResetModal();
+  closeDangerConfirmModal();
   closeReportModal();
   setAppMode("kafe");
   showToast("Növbə bağlandı! Hesabat arxivə göndərildi və kassa sıfırlandı.");
+}
+
+// ============================================================================
+// SADƏ KARTDAN NAĞDA KEÇİRDİLMƏ MODALI
+// ============================================================================
+function openQuickAtmModal() {
+  if (currentUserRole !== "admin") {
+    showToast("Kartdan nağda keçirmək yalnız admin üçündür!");
+    return;
+  }
+  if (!quickAtmModal) return;
+
+  const breakdown = getCashAndCardBreakdown(state);
+  const cardRemaining = Math.max(0, breakdown.cardRemaining || 0);
+
+  if (quickAtmInput) {
+    quickAtmInput.value = "";
+    quickAtmInput.placeholder = cardRemaining > 0 ? `Max: ${cardRemaining.toFixed(2)}` : "0.00";
+    quickAtmInput.max = cardRemaining > 0 ? String(cardRemaining) : "";
+  }
+
+  quickAtmModal.classList.add("open");
+  quickAtmModal.setAttribute("aria-hidden", "false");
+  setTimeout(() => {
+    if (quickAtmInput) quickAtmInput.focus();
+  }, 100);
+}
+
+function closeQuickAtmModal() {
+  if (!quickAtmModal) return;
+  quickAtmModal.classList.remove("open");
+  quickAtmModal.setAttribute("aria-hidden", "true");
+  if (quickAtmInput) {
+    quickAtmInput.value = "";
+  }
+}
+
+function handleConfirmQuickAtm() {
+  if (currentUserRole !== "admin") return;
+  if (!quickAtmInput) return;
+
+  const amount = round2(parseFloat(quickAtmInput.value));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showToast("Zəhmət olmasa düzgün məbləğ daxil edin!");
+    return;
+  }
+
+  const breakdown = getCashAndCardBreakdown(state);
+  if (amount > (breakdown.cardRemaining || 0) + 0.01) {
+    showToast(`Kartda kifayət qədər vəsait yoxdur! Maksimum: ${formatMoney(breakdown.cardRemaining || 0)}`);
+    return;
+  }
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+  if (!Array.isArray(state.atmTransfers)) {
+    state.atmTransfers = [];
+  }
+
+  const atmRecord = {
+    id: `atm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    amount,
+    time: timeStr,
+    date: getBusinessDateKey(now),
+    note: "Kartdan Nağda Keçid",
+    addedBy: currentUserRole,
+    updatedAt: Date.now()
+  };
+
+  state.atmTransfers.push(atmRecord);
+  saveState({ newAtmTransfers: [atmRecord] });
+
+  logAuditEvent({
+    type: "ATM_TRANSFER",
+    category: "kassa",
+    actionTitle: "Kartdan Nağda Keçirildi",
+    tableName: "Kassa",
+    amount: amount,
+    details: `${formatMoney(amount)} məbləğində vəsait kartdan nağd kassaya köçürüldü. Kim: ${currentUserRole}.`,
+    items: [],
+    role: currentUserRole
+  });
+
+  closeQuickAtmModal();
+  renderReportModal();
+  refreshAllActiveViews();
+  showToast(`${formatMoney(amount)} kartdan nağda keçirildi!`);
 }
 
 // XÜSUSİ ARXİV MODALI (Detallı Tarixçə, '✏️ Redaktə' və '✕' Silmə İmkanı — Yalnız Admin)
@@ -3817,13 +4238,53 @@ function closeArchiveModal() {
 
 function deleteArchiveDayById(archiveId) {
   if (currentUserRole !== "admin") return;
-  const archive = loadArchive();
-  const target = archive.find((item) => item.id === archiveId);
+  let rawList = [];
+  try {
+    rawList = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY) || "[]");
+  } catch (e) {
+    rawList = [];
+  }
+  const target = rawList.find((item) => item.id === archiveId);
   if (!target) return;
 
-  const updated = archive.filter((item) => item.id !== archiveId);
-  saveArchive(updated);
+  openDangerConfirmModal({
+    title: "Arxiv Gününü Sil",
+    text: `"${target.fullDate || target.date}" tarixli arxiv günü silinəcək. Bu əməliyyat geri qaytarılmır!<br><br>Təsdiq üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:`,
+    buttonText: "🗑 Bəli, Günü Sil",
+    onConfirm: () => doDeleteArchiveDay(archiveId)
+  });
+}
+
+function doDeleteArchiveDay(archiveId) {
+  let rawList = [];
+  try {
+    rawList = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY) || "[]");
+  } catch (e) {
+    rawList = [];
+  }
+  const target = rawList.find((item) => item.id === archiveId);
+  if (!target) return;
+
+  target.isDeleted = true;
+  target.deleted = true;
+  target.deletedAt = Date.now();
+  target.deletedBy = currentUserRole;
+
+  saveArchive(rawList);
+
+  logAuditEvent({
+    type: "ARCHIVE_DELETED",
+    category: "kassa",
+    actionTitle: "Arxiv Günü Silindi (Soft Delete)",
+    tableName: "Arxiv",
+    amount: target.grandNet || target.netCash || 0,
+    details: `${target.fullDate || target.date} tarixli gün arxivdən silindi. Kim: ${currentUserRole}.`,
+    items: [],
+    role: currentUserRole
+  });
+
   renderArchiveModal();
+  showToast("Arxiv günü silindi.");
 }
 
 function deleteArchiveBillById(archiveDayId, billId) {
@@ -3833,15 +4294,32 @@ function deleteArchiveBillById(archiveDayId, billId) {
   if (!dayEntry || !Array.isArray(dayEntry.closedBills)) return;
 
   const targetBill = dayEntry.closedBills.find((b) => b.id === billId);
-  dayEntry.closedBills = dayEntry.closedBills.filter((b) => b.id !== billId);
-  recalculateArchiveEntryTotals(dayEntry);
-  saveArchive(archive);
+  if (!targetBill) return;
 
+  openDangerConfirmModal({
+    title: "Arxiv Çekini Sil",
+    text: `"${targetBill.tableName || "Çek"}" (${formatMoney(targetBill.total || 0)}) çeki arxivdən silinəcək. Bu əməliyyat geri qaytarılmır!<br><br>Təsdiq üçün aşağıdakı xanaya böyük hərflərlə <strong>SİL</strong> yazın:`,
+    buttonText: "🗑 Bəli, Çeki Sil",
+    onConfirm: () => doDeleteArchiveBill(archiveDayId, billId)
+  });
+}
+
+function doDeleteArchiveBill(archiveDayId, billId) {
+  const archive = loadArchive();
+  const dayEntry = archive.find((d) => d.id === archiveDayId);
+  if (!dayEntry || !Array.isArray(dayEntry.closedBills)) return;
+
+  const targetBill = dayEntry.closedBills.find((b) => b.id === billId);
   if (targetBill) {
+    targetBill.isDeleted = true;
+    targetBill.deleted = true;
+    targetBill.deletedAt = Date.now();
+    targetBill.deletedBy = currentUserRole;
+
     logAuditEvent({
       type: "BILL_DELETED",
       category: "kassa",
-      actionTitle: "Arxiv Çeki Silindi",
+      actionTitle: "Arxiv Çeki Silindi (Soft Delete)",
       tableName: targetBill.tableName || "Arxiv Çeki",
       amount: targetBill.total || 0,
       details: `Arxivdən (${dayEntry.fullDate || dayEntry.date}) ${targetBill.tableName || "Çek"} silindi: ${targetBill.total || 0} ₼ (${targetBill.paymentMethod === "card" ? "Kart" : "Nağd"}).`,
@@ -3850,7 +4328,11 @@ function deleteArchiveBillById(archiveDayId, billId) {
     });
   }
 
+  dayEntry.closedBills = dayEntry.closedBills.filter((b) => b.id !== billId && !b.isDeleted);
+  recalculateArchiveEntryTotals(dayEntry);
+  saveArchive(archive);
   renderArchiveModal();
+  showToast("Arxiv çeki silindi.");
 }
 
 function renderArchiveModal() {
@@ -3953,11 +4435,8 @@ function renderArchiveModal() {
       </div>
 
       <div class="archive-day-actions-bar">
-        <button type="button" class="export-csv-btn-mini" title="Bu günün hesabatını Excel/CSV formatında yüklə">
-          📥 Excel / Hesabat (CSV)
-        </button>
-        <button type="button" class="print-voucher-btn-mini" title="Rəsmi Çek / Qəbz (PDF və Çap)">
-          📄 Rəsmi Çek (PDF / Çap)
+        <button type="button" class="print-voucher-btn-mini" title="Rəsmi Çek Formatında Bax / Paylaş">
+          🧾 Rəsmi Çek Formatında Bax / Paylaş
         </button>
       </div>
 
@@ -4009,14 +4488,6 @@ function renderArchiveModal() {
         </div>
       </div>
     `;
-
-    const exportCsvBtn = card.querySelector(".export-csv-btn-mini");
-    if (exportCsvBtn) {
-      exportCsvBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        downloadShiftCsv(entry, `BabaBala_Arxiv_${entry.shiftDateKey || "gun"}`);
-      });
-    }
 
     const printVoucherBtn = card.querySelector(".print-voucher-btn-mini");
     if (printVoucherBtn) {
@@ -4960,27 +5431,86 @@ if (saveOrderBtn) {
 }
 closeBillBtn.addEventListener("click", closeActiveTableBill);
 
-// Menyu Sürətli Axtarış Xanası Dinləyiciləri
+// Menyu Sürətli Axtarış Xanası və Açılan Nəticələr (Dropdown Overlay) Dinləyiciləri
 if (menuSearchInput) {
   menuSearchInput.addEventListener("input", () => {
+    const query = menuSearchInput.value.trim().toLowerCase();
     if (clearMenuSearchBtn) {
-      clearMenuSearchBtn.style.display = menuSearchInput.value ? "inline-flex" : "none";
+      clearMenuSearchBtn.style.display = query ? "inline-flex" : "none";
     }
-    const table = state.tables.find((t) => t.id === activeTableId);
-    if (table) renderQuickMenu(table);
+
+    if (!menuSearchResultsDropdown) return;
+
+    if (!query) {
+      menuSearchResultsDropdown.style.display = "none";
+      menuSearchResultsDropdown.innerHTML = "";
+      return;
+    }
+
+    const matched = MENU_CATALOG.filter((item) =>
+      item.name.toLowerCase().includes(query) ||
+      item.price.toFixed(2).includes(query)
+    );
+
+    menuSearchResultsDropdown.innerHTML = "";
+
+    if (matched.length === 0) {
+      menuSearchResultsDropdown.innerHTML = `
+        <div class="empty-order-box" style="padding: 10px; font-size: 0.88rem;">
+          "${query}" adına uyğun məhsul tapılmadı.
+        </div>
+      `;
+    } else {
+      matched.slice(0, 12).forEach((item) => {
+        const itemEl = document.createElement("div");
+        itemEl.className = "menu-search-result-item";
+        const catObj = MENU_CATEGORIES.find((c) => c.id === item.category);
+        itemEl.innerHTML = `
+          <div class="search-res-info">
+            <span class="search-res-name">${item.name}</span>
+            <span class="search-res-cat">${catObj ? catObj.label : ""} (${item.unit})</span>
+          </div>
+          <strong class="search-res-price">${formatMoney(item.price)}</strong>
+        `;
+        itemEl.addEventListener("click", () => {
+          const table = state.tables.find((t) => t.id === activeTableId);
+          if (table) {
+            updateTableItemQty(table.id, item.id, 1);
+            menuSearchInput.value = "";
+            if (clearMenuSearchBtn) clearMenuSearchBtn.style.display = "none";
+            menuSearchResultsDropdown.style.display = "none";
+            menuSearchResultsDropdown.innerHTML = "";
+            showToast(`➕ ${item.name} masaya əlavə edildi`);
+          }
+        });
+        menuSearchResultsDropdown.appendChild(itemEl);
+      });
+    }
+
+    menuSearchResultsDropdown.style.display = "flex";
   });
 }
+
 if (clearMenuSearchBtn) {
   clearMenuSearchBtn.addEventListener("click", () => {
     if (menuSearchInput) {
       menuSearchInput.value = "";
       clearMenuSearchBtn.style.display = "none";
-      const table = state.tables.find((t) => t.id === activeTableId);
-      if (table) renderQuickMenu(table);
+      if (menuSearchResultsDropdown) {
+        menuSearchResultsDropdown.style.display = "none";
+        menuSearchResultsDropdown.innerHTML = "";
+      }
       menuSearchInput.focus();
     }
   });
 }
+
+// Axtarış xanasından kənara kliklədikdə açılan nəticələri gizlət
+document.addEventListener("click", (e) => {
+  if (menuSearchResultsDropdown && !e.target.closest(".menu-search-wrap")) {
+    menuSearchResultsDropdown.style.display = "none";
+  }
+});
 
 // Ödəniş Metodu (💵 Nağd / 💳 Kart) Modalı Dinləyiciləri
 if (modalPayCashBtn) {
@@ -5121,12 +5651,71 @@ if (archiveModal) {
   });
 }
 
-endDayResetBtn.addEventListener("click", openConfirmResetModal);
-cancelResetBtn.addEventListener("click", closeConfirmResetModal);
-confirmResetBtn.addEventListener("click", executeEndDayAndReset);
-confirmResetModal.addEventListener("click", (e) => {
-  if (e.target === confirmResetModal) closeConfirmResetModal();
-});
+if (endDayResetBtn) {
+  endDayResetBtn.addEventListener("click", openConfirmResetModal);
+}
+
+// 2 Mərhələli Təhlükəsizlik Kilidi Dinləyiciləri
+if (dangerConfirmInput) {
+  dangerConfirmInput.addEventListener("input", () => {
+    const val = dangerConfirmInput.value.trim().toUpperCase();
+    if (dangerExecuteBtn) {
+      dangerExecuteBtn.disabled = val !== "SİL";
+    }
+  });
+
+  dangerConfirmInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && dangerExecuteBtn && !dangerExecuteBtn.disabled) {
+      dangerExecuteBtn.click();
+    }
+  });
+}
+
+if (dangerCancelBtn) {
+  dangerCancelBtn.addEventListener("click", closeDangerConfirmModal);
+}
+
+if (dangerExecuteBtn) {
+  dangerExecuteBtn.addEventListener("click", () => {
+    const val = dangerConfirmInput ? dangerConfirmInput.value.trim().toUpperCase() : "";
+    if (val !== "SİL") return;
+    const action = pendingDangerAction;
+    closeDangerConfirmModal();
+    if (typeof action === "function") {
+      action();
+    }
+  });
+}
+
+if (dangerConfirmModal) {
+  dangerConfirmModal.addEventListener("click", (e) => {
+    if (e.target === dangerConfirmModal) closeDangerConfirmModal();
+  });
+}
+
+// Sadə Kartdan Nağda Keçir Dinləyiciləri
+if (quickAtmTransferBtn) {
+  quickAtmTransferBtn.addEventListener("click", openQuickAtmModal);
+}
+if (cancelQuickAtmBtn) {
+  cancelQuickAtmBtn.addEventListener("click", closeQuickAtmModal);
+}
+if (confirmQuickAtmBtn) {
+  confirmQuickAtmBtn.addEventListener("click", handleConfirmQuickAtm);
+}
+if (quickAtmModal) {
+  quickAtmModal.addEventListener("click", (e) => {
+    if (e.target === quickAtmModal) closeQuickAtmModal();
+  });
+}
+if (quickAtmInput) {
+  quickAtmInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleConfirmQuickAtm();
+    }
+  });
+}
 
 // Qaranlıq Rejim Düyməsi
 if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
@@ -5159,7 +5748,7 @@ if (auditFilterChips && auditFilterChips.length > 0) {
   });
 }
 
-// Rəsmi Çek / Qəbz (PDF və Çap) Modalı Dinləyiciləri
+// Rəsmi Çek / Qəbz (PDF, Çap və WhatsApp) Modalı Dinləyiciləri
 if (printReportVoucherBtn) {
   printReportVoucherBtn.addEventListener("click", () => {
     openReceiptVoucherModal(state);
@@ -5178,10 +5767,10 @@ if (printReceiptDocBtn) {
     window.print();
   });
 }
-if (downloadReceiptCsvBtn) {
-  downloadReceiptCsvBtn.addEventListener("click", () => {
+if (copyWhatsAppVoucherBtn) {
+  copyWhatsAppVoucherBtn.addEventListener("click", () => {
     const targetShift = currentVoucherShift || state;
-    downloadShiftCsv(targetShift, `BabaBala_Cek_${targetShift.shiftDateKey || "sened"}`);
+    copyWhatsAppVoucherText(targetShift);
   });
 }
 
