@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="BabaBala">
   <meta name="theme-color" content="#0f172a">
   <title>BabaBala — Kassa və Masa İdarəetməsi</title>
-  <link rel="manifest" href="manifest.json?v=5">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="manifest" href="manifest.json?v=6">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -30,6 +30,10 @@
         </div>
 
         <div class="header-controls">
+          <button type="button" id="openAuditLogBtn" class="role-badge-btn" aria-label="Əməliyyat Jurnalı">
+            <span>📜</span>
+            <span>Jurnal</span>
+          </button>
           <button type="button" id="openArchiveHeaderBtn" class="role-badge-btn is-admin admin-only-el" aria-label="Arxiv və Keçmiş Günlər">
             <span>📅</span>
             <span>Arxiv</span>
@@ -299,10 +303,13 @@
       </div>
 
       <div class="modal-body report-scroll-body">
-        <!-- Excel / CSV Yükləmə Düyməsi -->
+        <!-- Excel / CSV və Rəsmi Çek (PDF / Çap) Yükləmə Düymələri -->
         <div class="report-export-bar admin-only-el">
           <button type="button" id="exportReportCsvBtn" class="export-csv-btn">
-            📥 Excel / Hesabatı Yüklə (CSV)
+            📥 Excel / CSV Yüklə
+          </button>
+          <button type="button" id="printReportVoucherBtn" class="print-voucher-btn">
+            📄 Rəsmi Çek (PDF / Çap)
           </button>
         </div>
 
@@ -332,106 +339,127 @@
           </button>
         </div>
 
-        <!-- ATM NAĞDLAŞDIRMA LOGU (Əgər gün ərzində ATM çıxarışı olubsa) -->
-        <div id="reportAtmSection" class="report-block" style="display: none;">
-          <div class="report-block-header">
-            <h4>🏧 ATM NAĞDLAŞDIRMA LOGU (Kart ➔ Nağd)</h4>
-          </div>
-          <div id="reportAtmTransfersList" class="mini-list"></div>
+        <div id="openTablesWarningBox" class="open-tables-banner" style="display: none;">
+          <span>Açıq masalarda gözləyən hesab:</span>
+          <strong id="reportOpenTablesAmount">0.00 ₼</strong>
         </div>
 
-        <!-- OFİSİANTLAR ÜZRƏ GÜNDƏLİK DÖVRİYYƏ BLOKU -->
-        <div class="report-block">
-          <div class="report-block-header">
-            <h4>👨‍🍳 OFİSİANTLAR ÜZRƏ DÖVRİYYƏ</h4>
-          </div>
-          <div id="reportWaiterStatsList" class="mini-list"></div>
-        </div>
+        <!-- 4 ƏDƏD AÇILIB-BAĞLANAN (ACCORDION) HESABAT BLOKU -->
 
-        <!-- D) 📊 MASALAR ÜZRƏ HESABAT (Bütün Masalar və Pəncərə) -->
-        <div class="report-block">
-          <div class="report-block-header">
-            <h4>📊 MASALAR ÜZRƏ HESABAT (15 Masa &amp; Pəncərə)</h4>
-          </div>
-          <div id="reportPerTableStatsList" class="per-table-stats-grid"></div>
-        </div>
-
-        <!-- A) 🍽 KAFE KASSASI BLOKU -->
-        <div class="report-block report-block-cafe">
-          <div class="report-block-header">
-            <h4>🍽 KAFE KASSASI</h4>
-            <span id="reportCafeNetBadge" class="report-badge-net">Xalis: 0.00 ₼</span>
-          </div>
-
-          <div class="report-cards">
-            <div class="report-card card-income">
-              <span class="report-card-label">Kafe Satışı (Brutto)</span>
-              <strong id="reportCafeSales" class="report-card-value">0.00 ₼</strong>
+        <!-- 1. ▾ OFİSİANTLAR ÜZRƏ DÖVRİYYƏ -->
+        <div class="report-accordion-card" id="accWaiterCard">
+          <button type="button" class="report-accordion-header" id="accWaiterHeader" aria-expanded="false">
+            <div class="report-acc-title-wrap">
+              <span class="report-acc-arrow">▸</span>
+              <h4>👨‍🍳 Ofisiantlar Üzrə Dövriyyə</h4>
             </div>
-            <div class="report-card card-expense">
-              <span class="report-card-label">Kafe Xərcləri</span>
-              <strong id="reportCafeExpenses" class="report-card-value">-0.00 ₼</strong>
-            </div>
-          </div>
-
-          <div id="openTablesWarningBox" class="open-tables-banner" style="display: none;">
-            <span>Açıq masalarda gözləyən hesab:</span>
-            <strong id="reportOpenTablesAmount">0.00 ₼</strong>
-          </div>
-
-          <!-- Masalar Üzrə Bağlanmış Hesablar (Admin '✕' ilə silə bilir) -->
-          <div class="report-section">
-            <h5 class="mini-title">Kafe Masaları Üzrə Hesablar</h5>
-            <div id="reportTableBillsList" class="mini-list"></div>
-          </div>
-
-          <!-- Satılan Kafe Məhsulları -->
-          <div class="report-section">
-            <h5 class="mini-title">Satılan Kafe Yemək və İçkiləri (İnventar)</h5>
-            <div id="reportSoldItems" class="mini-list"></div>
-          </div>
-
-          <!-- Kafe Xərcləri -->
-          <div class="report-section">
-            <h5 class="mini-title">Kafe Xərcləri</h5>
-            <div id="reportCafeExpensesList" class="mini-list"></div>
+            <span id="accWaiterBadge" class="report-acc-badge">0 masa</span>
+          </button>
+          <div class="report-accordion-content" id="accWaiterContent" style="display: none;">
+            <div id="reportWaiterStatsList" class="mini-list"></div>
           </div>
         </div>
 
-        <!-- B) 🪟 PƏNCƏRƏ KASSASI BLOKU -->
-        <div class="report-block report-block-window">
-          <div class="report-block-header">
-            <h4>🪟 PƏNCƏRƏ KASSASI</h4>
-            <span id="reportWindowNetBadge" class="report-badge-net">Xalis: 0.00 ₼</span>
-          </div>
-
-          <div class="report-cards">
-            <div class="report-card card-income">
-              <span class="report-card-label">Pəncərə Satışı</span>
-              <strong id="reportWindowSales" class="report-card-value">0.00 ₼</strong>
+        <!-- 2. ▾ MASALAR ÜZRƏ DETALLI HESABAT -->
+        <div class="report-accordion-card" id="accTableStatsCard">
+          <button type="button" class="report-accordion-header" id="accTableStatsHeader" aria-expanded="false">
+            <div class="report-acc-title-wrap">
+              <span class="report-acc-arrow">▸</span>
+              <h4>📊 Masalar Üzrə Detallı Hesabat</h4>
             </div>
-            <div class="report-card card-expense">
-              <span class="report-card-label">Pəncərə Xərcləri</span>
-              <strong id="reportWindowExpenses" class="report-card-value">-0.00 ₼</strong>
+            <span id="accTableStatsBadge" class="report-acc-badge">15 Masa &amp; Pəncərə</span>
+          </button>
+          <div class="report-accordion-content" id="accTableStatsContent" style="display: none;">
+            <div id="reportPerTableStatsList" class="per-table-stats-grid"></div>
+          </div>
+        </div>
+
+        <!-- 3. ▾ KAFE VƏ PƏNCƏRƏ KASSASI DETALLARI -->
+        <div class="report-accordion-card" id="accSalesCard">
+          <button type="button" class="report-accordion-header" id="accSalesHeader" aria-expanded="false">
+            <div class="report-acc-title-wrap">
+              <span class="report-acc-arrow">▸</span>
+              <h4>🍽 Kafe Kassası və 🪟 Pəncərə Kassası Detalları</h4>
+            </div>
+            <span id="accSalesBadge" class="report-acc-badge">Satışlar &amp; Çeklər</span>
+          </button>
+          <div class="report-accordion-content" id="accSalesContent" style="display: none;">
+            <!-- A) 🍽 KAFE KASSASI BLOKU -->
+            <div class="report-block report-block-cafe">
+              <div class="report-block-header">
+                <h4>🍽 KAFE KASSASI</h4>
+                <span id="reportCafeNetBadge" class="report-badge-net">Xalis: 0.00 ₼</span>
+              </div>
+              <div class="report-cards">
+                <div class="report-card card-income">
+                  <span class="report-card-label">Kafe Satışı (Brutto)</span>
+                  <strong id="reportCafeSales" class="report-card-value">0.00 ₼</strong>
+                </div>
+                <div class="report-card card-expense">
+                  <span class="report-card-label">Kafe Xərcləri</span>
+                  <strong id="reportCafeExpenses" class="report-card-value">-0.00 ₼</strong>
+                </div>
+              </div>
+              <div class="report-section">
+                <h5 class="mini-title">Kafe Masaları Üzrə Bağlanmış Hesablar</h5>
+                <div id="reportTableBillsList" class="mini-list"></div>
+              </div>
+              <div class="report-section">
+                <h5 class="mini-title">Satılan Kafe Yemək və İçkiləri (İnventar)</h5>
+                <div id="reportSoldItems" class="mini-list"></div>
+              </div>
+            </div>
+
+            <!-- B) 🪟 PƏNCƏRƏ KASSASI BLOKU -->
+            <div class="report-block report-block-window">
+              <div class="report-block-header">
+                <h4>🪟 PƏNCƏRƏ KASSASI</h4>
+                <span id="reportWindowNetBadge" class="report-badge-net">Xalis: 0.00 ₼</span>
+              </div>
+              <div class="report-cards">
+                <div class="report-card card-income">
+                  <span class="report-card-label">Pəncərə Satışı</span>
+                  <strong id="reportWindowSales" class="report-card-value">0.00 ₼</strong>
+                </div>
+                <div class="report-card card-expense">
+                  <span class="report-card-label">Pəncərə Xərcləri</span>
+                  <strong id="reportWindowExpenses" class="report-card-value">-0.00 ₼</strong>
+                </div>
+              </div>
+              <div class="report-section">
+                <h5 class="mini-title">Pəncərə Satış Çekləri (Tranzaksiyalar)</h5>
+                <div id="reportWindowTransactionsList" class="mini-list"></div>
+              </div>
+              <div class="report-section">
+                <h5 class="mini-title">Satılan Peraşki və Dürməklər (İnventar)</h5>
+                <div id="reportWindowSoldItems" class="mini-list"></div>
+              </div>
             </div>
           </div>
+        </div>
 
-          <!-- Pəncərə Satış Tranzaksiyaları (Redaktə və Silmə ilə) -->
-          <div class="report-section">
-            <h5 class="mini-title">Pəncərə Satış Çekləri (Tranzaksiyalar)</h5>
-            <div id="reportWindowTransactionsList" class="mini-list"></div>
-          </div>
-
-          <!-- Pəncərə Məhsullarının Satış Sayı -->
-          <div class="report-section">
-            <h5 class="mini-title">Satılan Peraşki və Dürməklər (İnventar)</h5>
-            <div id="reportWindowSoldItems" class="mini-list"></div>
-          </div>
-
-          <!-- Pəncərə Xərcləri -->
-          <div class="report-section">
-            <h5 class="mini-title">Pəncərə Xərcləri</h5>
-            <div id="reportWindowExpensesList" class="mini-list"></div>
+        <!-- 4. ▾ XƏRCLƏR VƏ ATM ÇIXARIŞI -->
+        <div class="report-accordion-card" id="accExpensesCard">
+          <button type="button" class="report-accordion-header" id="accExpensesHeader" aria-expanded="false">
+            <div class="report-acc-title-wrap">
+              <span class="report-acc-arrow">▸</span>
+              <h4>💸 Xərclər və 🏧 ATM Çıxarışı</h4>
+            </div>
+            <span id="accExpensesBadge" class="report-acc-badge">-0.00 ₼</span>
+          </button>
+          <div class="report-accordion-content" id="accExpensesContent" style="display: none;">
+            <div id="reportAtmSection" class="report-section" style="display: none;">
+              <h5 class="mini-title">🏧 ATM Nağdlaşdırma Logu (Kart ➔ Nağd)</h5>
+              <div id="reportAtmTransfersList" class="mini-list"></div>
+            </div>
+            <div class="report-section">
+              <h5 class="mini-title">🍽 Kafe Xərcləri</h5>
+              <div id="reportCafeExpensesList" class="mini-list"></div>
+            </div>
+            <div class="report-section">
+              <h5 class="mini-title">🪟 Pəncərə Xərcləri</h5>
+              <div id="reportWindowExpensesList" class="mini-list"></div>
+            </div>
           </div>
         </div>
 
@@ -692,12 +720,64 @@
     </div>
   </div>
 
+  <!-- MODAL 12: RƏSMİ GÜNLÜK KASSA ÇEKİ / PDF (Telefonda Baxış və Çap) -->
+  <div id="receiptVoucherModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet receipt-sheet">
+      <div class="modal-header">
+        <div>
+          <h3 id="receiptVoucherModalTitle">📄 Rəsmi Günlük Kassa Çeki</h3>
+          <span id="receiptVoucherDateSub" class="report-date-sub"></span>
+        </div>
+        <button type="button" id="closeReceiptVoucherBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <div class="receipt-action-bar">
+        <button type="button" id="printReceiptDocBtn" class="primary-submit-btn btn-blue">
+          🖨️ Çap Et / PDF Saxla
+        </button>
+        <button type="button" id="downloadReceiptCsvBtn" class="chip-btn">
+          📥 CSV Endir
+        </button>
+      </div>
+      <div class="modal-body receipt-scroll-area">
+        <div id="receiptVoucherPaper" class="receipt-paper">
+          <!-- Dinamik olaraq Azərbaycan dilində rəsmi çek mətni render olunur -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 13: SİLİNMƏZ ƏMƏLİYYAT JURNALI (AUDIT LOG / TARİXÇƏ) -->
+  <div id="auditLogModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-sheet modal-sheet-full">
+      <div class="modal-header">
+        <div>
+          <h3>📜 Əməliyyat Jurnalı (Tarixçə)</h3>
+          <span class="report-date-sub">Bütün sifariş, hesab və xərc hərəkətləri</span>
+        </div>
+        <button type="button" id="closeAuditLogBtn" class="modal-close-btn" aria-label="Bağla">✕</button>
+      </div>
+      <div class="modal-body report-scroll-body">
+        <div class="audit-log-controls">
+          <input type="search" id="auditSearchInput" class="menu-search-input" placeholder="🔍 Masa, ofisiant və ya məhsul axtar...">
+          <div class="audit-filter-chips">
+            <button type="button" class="chip-btn active" data-filter="all">Hamısı</button>
+            <button type="button" class="chip-btn" data-filter="order">Sifarişlər</button>
+            <button type="button" class="chip-btn" data-filter="bill">Hesablar</button>
+            <button type="button" class="chip-btn" data-filter="expense">Xərclər</button>
+            <button type="button" class="chip-btn" data-filter="other">Digər</button>
+          </div>
+        </div>
+        <div id="auditLogList" class="audit-log-list"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bildiriş (Toast) -->
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

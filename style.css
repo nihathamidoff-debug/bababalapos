@@ -840,11 +840,22 @@ input {
   color: var(--text-main);
 }
 
-/* TEZ SEÇİM BÖLMƏSİ (SADƏ ÇAY, PİVƏ 1.70, ARAQ 100Q) */
+/* TEZ SEÇİM BÖLMƏSİ (YALNIZ 3 ƏSAS MƏHSUL: SADƏ ÇAY, PİVƏ NZS, ARAQ 100Q) */
 .pinned-quick-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .pinned-quick-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .pinned-quick-grid .menu-btn {
+    min-height: 84px;
+    padding: 10px 8px;
+  }
 }
 
 .menu-btn-bottom-row {
@@ -1831,7 +1842,9 @@ body.role-waiter .delete-record-btn,
 body.role-waiter .delete-expense-btn,
 body.role-waiter .btn-add-archive-expense,
 body.role-waiter .export-csv-btn,
-body.role-waiter .export-csv-btn-mini {
+body.role-waiter .export-csv-btn-mini,
+body.role-waiter .print-voucher-btn,
+body.role-waiter .print-voucher-btn-mini {
   display: none !important;
 }
 
@@ -2927,6 +2940,27 @@ body.dark-mode .transfer-merge-title {
   background: #059669;
 }
 
+.print-voucher-btn-mini {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  transition: all 0.1s ease;
+}
+
+.print-voucher-btn-mini:active {
+  transform: scale(0.95);
+  background: #1d4ed8;
+}
+
 /* Masalar Üzrə Statistik Qrid */
 .per-table-stats-grid {
   display: grid;
@@ -3078,4 +3112,345 @@ body.dark-mode .btn-add-archive-expense {
   background: rgba(2, 132, 199, 0.2);
   border-color: #38bdf8;
   color: #7dd3fc;
+}
+
+/* ============================================================================
+   GÜNLÜK HESABAT ACCORDION (COLLAPSIBLE DROPDOWN)
+   ============================================================================ */
+.report-accordion-card {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease;
+}
+
+.report-accordion-card.open {
+  border-color: #3b82f6;
+}
+
+.report-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  transition: background 0.12s ease;
+  gap: 8px;
+}
+
+.report-accordion-header:hover {
+  background: var(--bg-hover);
+}
+
+.report-acc-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.report-acc-arrow {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.report-accordion-card.open .report-acc-arrow {
+  transform: rotate(90deg);
+  color: #3b82f6;
+}
+
+.report-accordion-header h4 {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.report-acc-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.report-accordion-content {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* ============================================================================
+   RƏSMİ GÜNLÜK ÇEK / SƏNƏD (RECEIPT VOUCHER & PRINT / PDF)
+   ============================================================================ */
+.print-voucher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1.5px solid #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  transition: all 0.1s ease;
+}
+
+.print-voucher-btn:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+}
+
+.receipt-sheet {
+  max-width: 440px;
+  max-height: 90vh;
+}
+
+.receipt-action-bar {
+  display: flex;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--bg-hover);
+  border-bottom: 1.5px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.receipt-scroll-area {
+  padding: 16px;
+  background: #f1f5f9;
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.receipt-paper {
+  width: 100%;
+  max-width: 380px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 24px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.receipt-paper-header {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.receipt-paper-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin: 0 0 4px;
+  color: #0f172a;
+}
+
+.receipt-paper-sub {
+  font-size: 0.8rem;
+  color: #475569;
+  margin: 0;
+}
+
+.receipt-divider-dashed {
+  border: none;
+  border-top: 1.5px dashed #94a3b8;
+  margin: 12px 0;
+}
+
+.receipt-table-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  font-size: 0.83rem;
+}
+
+.receipt-table-line.bold {
+  font-weight: 700;
+}
+
+.receipt-table-line.hero-line {
+  font-size: 0.96rem;
+  font-weight: 800;
+  margin-top: 4px;
+  color: #0f172a;
+}
+
+.receipt-section-heading {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #1e293b;
+  text-transform: uppercase;
+  margin: 10px 0 6px;
+  letter-spacing: 0.3px;
+}
+
+.receipt-paper-footer {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 16px;
+}
+
+/* @media print: Yalnız və yalnız çek çap olunur */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #receiptVoucherPaper,
+  #receiptVoucherPaper * {
+    visibility: visible !important;
+  }
+  #receiptVoucherPaper {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 10px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
+/* ============================================================================
+   SİLİNMƏZ ƏMƏLİYYAT JURNALI (AUDIT LOG / HISTORY)
+   ============================================================================ */
+.audit-log-controls {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.audit-filter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.audit-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.audit-log-card {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.audit-log-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.audit-log-time {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.audit-log-actor {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.audit-log-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.audit-log-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.audit-log-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.audit-badge-order { background: #dcfce7; color: #15803d; }
+.audit-badge-bill { background: #dbeafe; color: #1d4ed8; }
+.audit-badge-expense { background: #fee2e2; color: #b91c1c; }
+.audit-badge-transfer { background: #f3e8ff; color: #7e22ce; }
+.audit-badge-atm { background: #e0f2fe; color: #0369a1; }
+.audit-badge-edit { background: #fef3c7; color: #b45309; }
+
+.audit-log-details {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Qaranlıq Rejim Əlavələri */
+body.dark-mode .report-accordion-card {
+  background: #18181b;
+  border-color: #27272a;
+}
+
+body.dark-mode .report-accordion-card.open {
+  border-color: #3b82f6;
+}
+
+body.dark-mode .report-accordion-header {
+  background: #18181b;
+}
+
+body.dark-mode .report-accordion-header:hover {
+  background: #27272a;
+}
+
+body.dark-mode .report-accordion-content {
+  border-top-color: #27272a;
+}
+
+body.dark-mode .receipt-scroll-area {
+  background: #090d16;
+}
+
+body.dark-mode .audit-log-card {
+  background: #18181b;
+  border-color: #27272a;
 }
