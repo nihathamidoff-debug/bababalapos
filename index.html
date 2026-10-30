@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="BabaBala">
   <meta name="theme-color" content="#0f172a">
   <title>BabaBala — Kassa və Masa İdarəetməsi</title>
-  <link rel="manifest" href="manifest.json?v=13">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="manifest" href="manifest.json?v=14">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -133,6 +133,14 @@
             <h3 class="subsection-title">Pəncərə Menyusu</h3>
             <span class="subsection-hint">Toxunaraq səbətə əlavə et</span>
           </div>
+
+          <!-- Pəncərə Sərbəst Qiymət / Servis Əlavə Et (Birbaşa özün yaz və qiymətin vur) -->
+          <form id="windowQuickCustomForm" class="window-quick-custom-bar">
+            <input type="text" id="windowCustomNameInput" class="wqc-input-name" placeholder="✍️ Servis / Sifariş adı yaz (məs: Servis, Əlavə...)" autocomplete="off">
+            <input type="number" id="windowCustomPriceInput" class="wqc-input-price" step="0.01" min="0.05" inputmode="decimal" placeholder="Qiymət ₼" required>
+            <button type="submit" class="wqc-submit-btn">➕ Əlavə Et</button>
+          </form>
+
           <div class="window-category-tabs">
             <button type="button" class="window-cat-tab active" data-cat="all">Hamısı</button>
             <button type="button" class="window-cat-tab" data-cat="peraski">🥟 Dürmək &amp; Peraşki</button>
@@ -893,6 +901,6 @@
   <!-- Firebase Rəsmi SDK (Firestore Canlı Sinxronizasiya və Offline Cache Dəstəyi ilə) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

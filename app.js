@@ -470,16 +470,33 @@ function recalculateShiftTotalsFromLedger(targetState = state) {
   const cafeSoldMap = {};
   const cafeCustomList = [];
   const winSoldMap = {};
+  const winCustomList = [];
 
   activeBills.forEach((tx) => {
     if (tx.source === "pencere" || tx.tableId === "pencere") {
       winTotal = round2(winTotal + tx.total);
       (tx.items || []).forEach((it) => {
-        const winCatalogItem = it.itemId
-          ? WINDOW_MENU_CATALOG.find((m) => m.id === it.itemId)
-          : WINDOW_MENU_CATALOG.find((m) => m.name === it.name);
-        if (winCatalogItem) {
-          winSoldMap[winCatalogItem.id] = (Number(winSoldMap[winCatalogItem.id]) || 0) + (Number(it.qty) || 0);
+        if (it.isCustom) {
+          winCustomList.push({
+            id: it.customRecordId || `wsc_${tx.id}_${it.name}`,
+            name: it.name,
+            qty: Number(it.qty) || 1,
+            total: round2(it.total || (Number(it.qty) || 1) * (Number(it.price) || 0))
+          });
+        } else {
+          const winCatalogItem = it.itemId
+            ? WINDOW_MENU_CATALOG.find((m) => m.id === it.itemId)
+            : WINDOW_MENU_CATALOG.find((m) => m.name === it.name);
+          if (winCatalogItem) {
+            winSoldMap[winCatalogItem.id] = (Number(winSoldMap[winCatalogItem.id]) || 0) + (Number(it.qty) || 0);
+          } else {
+            winCustomList.push({
+              id: it.customRecordId || `wsc_${tx.id}_${it.name}`,
+              name: it.name,
+              qty: Number(it.qty) || 1,
+              total: round2(it.total || (Number(it.qty) || 1) * (Number(it.price) || 0))
+            });
+          }
         }
       });
     } else {
@@ -509,6 +526,7 @@ function recalculateShiftTotalsFromLedger(targetState = state) {
   targetState.soldCustomItems = cafeCustomList;
   targetState.windowSalesTotal = round2(winTotal);
   targetState.windowSoldSummary = winSoldMap;
+  targetState.windowSoldCustomItems = winCustomList;
 }
 
 // İstənilən mənbədən (localStorage və ya Firebase) gələn State obyektini normallaşdırmaq
@@ -1109,6 +1127,13 @@ function setWindowPaymentMethod(method) {
   if (windowPayCardBtn) windowPayCardBtn.classList.toggle("active", selectedWindowPayMethod === "card");
 }
 
+function getWindowCartCustomItems() {
+  if (!state.windowCart || typeof state.windowCart !== "object") return [];
+  return Object.values(state.windowCart).filter(
+    (v) => v && typeof v === "object" && v.isCustom && (Number(v.qty) || 0) > 0 && (Number(v.price) || 0) > 0
+  );
+}
+
 function getWindowCartSummary() {
   let totalAmount = 0;
   let totalCount = 0;
@@ -1120,11 +1145,55 @@ function getWindowCartSummary() {
         totalAmount += qty * item.price;
       }
     }
+    for (const custom of getWindowCartCustomItems()) {
+      const cQty = Number(custom.qty) || 0;
+      const cPrice = Number(custom.price) || 0;
+      totalCount += cQty;
+      totalAmount += cQty * cPrice;
+    }
   }
   return {
     totalAmount: round2(totalAmount),
     totalCount
   };
+}
+
+function addWindowCustomItem(rawName, rawPrice) {
+  const name = (rawName || "").trim() || "Servis / Əlavə";
+  const price = round2(parseFloat(rawPrice));
+  if (!price || price <= 0) {
+    showToast("⚠️ Düzgün qiymət daxil edin!");
+    return false;
+  }
+  if (!state.windowCart || typeof state.windowCart !== "object") {
+    state.windowCart = {};
+  }
+  const customId = `custom_win_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+  state.windowCart[customId] = {
+    isCustom: true,
+    id: customId,
+    name,
+    price,
+    qty: 1
+  };
+  saveState({ syncWindowCart: true });
+  renderWindowScreen();
+  showToast(`➕ "${name}" (${formatMoney(price)}) pəncərə səbətinə əlavə edildi!`);
+  return true;
+}
+
+function updateWindowCustomItemQty(customId, delta) {
+  if (!state.windowCart || typeof state.windowCart !== "object") return;
+  const entry = state.windowCart[customId];
+  if (!entry || typeof entry !== "object") return;
+  const next = (Number(entry.qty) || 0) + delta;
+  if (next <= 0) {
+    delete state.windowCart[customId];
+  } else {
+    entry.qty = next;
+  }
+  saveState({ syncWindowCart: true });
+  renderWindowScreen();
 }
 
 function updateWindowCartQty(itemId, delta) {
@@ -1150,7 +1219,7 @@ function clearWindowCart() {
 
 // Pəncərə Sifarişini Təsdiqlə (Gözləyən Sifarişlər Siyahısına Yaz)
 function confirmWindowOrder() {
-  const { totalAmount, totalCount } = getWindowCartSummary();
+  const { totalAmount } = getWindowCartSummary();
   if (totalAmount <= 0) {
     showToast("⚠️ Səbət boşdur!");
     return;
@@ -1170,6 +1239,19 @@ function confirmWindowOrder() {
         isCustom: false
       });
     }
+  }
+  for (const custom of getWindowCartCustomItems()) {
+    const cQty = Number(custom.qty) || 1;
+    const cPrice = Number(custom.price) || 0;
+    billItems.push({
+      customRecordId: custom.id || `wsc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: custom.name,
+      qty: cQty,
+      price: cPrice,
+      unit: "ədəd",
+      total: round2(cQty * cPrice),
+      isCustom: true
+    });
   }
 
   const now = new Date();
@@ -1374,6 +1456,19 @@ function finalizeWindowInstantPayment(payMethod = "cash") {
       });
     }
   }
+  for (const custom of getWindowCartCustomItems()) {
+    const cQty = Number(custom.qty) || 1;
+    const cPrice = Number(custom.price) || 0;
+    billItems.push({
+      customRecordId: custom.id || `wsc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: custom.name,
+      qty: cQty,
+      price: cPrice,
+      unit: "ədəd",
+      total: round2(cQty * cPrice),
+      isCustom: true
+    });
+  }
 
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -1472,11 +1567,12 @@ function renderWindowScreen() {
   // Səbət siyahısı
   windowCartListEl.innerHTML = "";
   const orderedItems = WINDOW_MENU_CATALOG.filter((item) => (Number(state.windowCart[item.id]) || 0) > 0);
+  const customWinItems = getWindowCartCustomItems();
 
-  if (orderedItems.length === 0) {
+  if (orderedItems.length === 0 && customWinItems.length === 0) {
     windowCartListEl.innerHTML = `
       <div class="empty-order-box">
-        Səbət boşdur. Aşağıdakı menyudan toxunaraq əlavə edin.
+        Səbət boşdur. Aşağıdakı menyudan toxunaraq və ya sərbəst qiymət yazaraq əlavə edin.
       </div>
     `;
   } else {
@@ -1501,6 +1597,31 @@ function renderWindowScreen() {
 
       row.querySelector(".qty-minus").addEventListener("click", () => updateWindowCartQty(item.id, -1));
       row.querySelector(".qty-plus").addEventListener("click", () => updateWindowCartQty(item.id, 1));
+      windowCartListEl.appendChild(row);
+    });
+
+    customWinItems.forEach((custom) => {
+      const qty = Number(custom.qty) || 1;
+      const price = Number(custom.price) || 0;
+      const lineTotal = round2(qty * price);
+
+      const row = document.createElement("div");
+      row.className = "order-row";
+      row.innerHTML = `
+        <div class="order-item-info">
+          <div class="order-item-name">✍️ ${custom.name}</div>
+          <div class="order-item-unit">${formatMoney(price)} / ədəd</div>
+        </div>
+        <div class="order-controls">
+          <button type="button" class="qty-btn qty-minus" aria-label="Azalt">−</button>
+          <span class="order-item-qty">${qty}</span>
+          <button type="button" class="qty-btn qty-plus" aria-label="Artır">+</button>
+        </div>
+        <div class="order-item-total">${formatMoney(lineTotal)}</div>
+      `;
+
+      row.querySelector(".qty-minus").addEventListener("click", () => updateWindowCustomItemQty(custom.id, -1));
+      row.querySelector(".qty-plus").addEventListener("click", () => updateWindowCustomItemQty(custom.id, 1));
       windowCartListEl.appendChild(row);
     });
   }
@@ -1531,6 +1652,19 @@ function renderWindowScreen() {
 
     windowMenuGridEl.appendChild(btn);
   });
+
+  // Pəncərə üçün "+ Sərbəst Qiymət / Servis" Kartı
+  const winCustomBtn = document.createElement("button");
+  winCustomBtn.type = "button";
+  winCustomBtn.className = "menu-btn menu-btn-custom";
+  winCustomBtn.innerHTML = `
+    <div class="menu-btn-top">
+      <span class="menu-btn-title">+ Sərbəst Qiymət / Servis</span>
+    </div>
+    <span class="menu-btn-price">Özün yaz &amp; qiymət vur ₼</span>
+  `;
+  winCustomBtn.addEventListener("click", () => openCustomItemModal("window"));
+  windowMenuGridEl.appendChild(winCustomBtn);
 }
 
 // ============================================================================
@@ -1555,8 +1689,27 @@ function getWaiterPadSummary() {
   let totalAmount = 0;
   const items = [];
 
-  for (const [itemId, rawQty] of Object.entries(waiterPadCart)) {
-    const qty = Number(rawQty) || 0;
+  for (const [itemId, rawVal] of Object.entries(waiterPadCart)) {
+    if (rawVal && typeof rawVal === "object" && rawVal.isCustom) {
+      const cQty = Number(rawVal.qty) || 0;
+      const cPrice = Number(rawVal.price) || 0;
+      if (cQty <= 0 || cPrice <= 0) continue;
+      const lineTotal = round2(cQty * cPrice);
+      totalCount += cQty;
+      totalAmount = round2(totalAmount + lineTotal);
+      items.push({
+        customRecordId: rawVal.id || itemId,
+        name: rawVal.name || "Servis / Əlavə",
+        qty: cQty,
+        price: cPrice,
+        unit: "ədəd",
+        total: lineTotal,
+        isCustom: true
+      });
+      continue;
+    }
+
+    const qty = Number(rawVal) || 0;
     if (qty <= 0) continue;
     const catItem = MENU_CATALOG.find((m) => m.id === itemId);
     if (!catItem) continue;
@@ -1569,7 +1722,8 @@ function getWaiterPadSummary() {
       qty,
       price: catItem.price,
       unit: catItem.unit,
-      total: lineTotal
+      total: lineTotal,
+      isCustom: false
     });
   }
 
@@ -1612,7 +1766,19 @@ function dispatchWaiterPadToTable(tableId) {
   }
 
   items.forEach((it) => {
-    table.orders[it.itemId] = (Number(table.orders[it.itemId]) || 0) + it.qty;
+    if (it.isCustom) {
+      if (!Array.isArray(table.customOrders)) {
+        table.customOrders = [];
+      }
+      table.customOrders.push({
+        id: it.customRecordId || `custom_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        name: it.name,
+        price: it.price,
+        qty: it.qty
+      });
+    } else {
+      table.orders[it.itemId] = (Number(table.orders[it.itemId]) || 0) + it.qty;
+    }
   });
 
   table.lastWaiter = currentUserRole;
@@ -1659,7 +1825,7 @@ function dispatchWaiterPadToWindow(isInstantCash = false) {
       total: round2(totalAmount),
       totalAmount: round2(totalAmount),
       paymentMethod: "cash",
-      items: items.map((it) => ({ ...it, isCustom: false })),
+      items: items.map((it) => ({ ...it, isCustom: Boolean(it.isCustom) })),
       closedBy: getRoleDisplayName(closedByRoleKey),
       closedByRole: closedByRoleKey,
       updatedAt: Date.now()
@@ -1693,7 +1859,7 @@ function dispatchWaiterPadToWindow(isInstantCash = false) {
       orderNumber: orderNum,
       time: timeStr,
       dateTimeLabel: getShortDateTimeAz(now),
-      items: items.map((it) => ({ ...it, isCustom: false })),
+      items: items.map((it) => ({ ...it, isCustom: Boolean(it.isCustom) })),
       total: round2(totalAmount),
       totalAmount: round2(totalAmount),
       createdBy: getRoleDisplayName(currentUserRole),
@@ -1881,8 +2047,14 @@ function renderWaiterExpressView() {
         const activeItems = [];
         MENU_CATALOG.forEach((m) => {
           const q = Number(table.orders[m.id]) || 0;
-          if (q > 0) activeItems.push({ id: m.id, name: m.name, qty: q, price: m.price });
+          if (q > 0) activeItems.push({ id: m.id, name: m.name, qty: q, price: m.price, isCustom: false });
         });
+        if (Array.isArray(table.customOrders)) {
+          table.customOrders.forEach((c) => {
+            const q = Number(c.qty) || 0;
+            if (q > 0) activeItems.push({ id: c.id, name: c.name, qty: q, price: c.price, isCustom: true });
+          });
+        }
         const summaryText = activeItems.map((i) => `${i.qty}× ${i.name}`).join(", ");
 
         const itemEl = document.createElement("div");
@@ -1893,7 +2065,7 @@ function renderWaiterExpressView() {
             (i) => `
             <span class="wexp-mini-item-chip">
               <span>${i.qty}× ${i.name}</span>
-              <button type="button" class="wexp-mini-chip-minus" data-item-id="${i.id}" title="1 ədəd azalt">−</button>
+              <button type="button" class="wexp-mini-chip-minus" data-item-id="${i.id}" data-is-custom="${i.isCustom ? "1" : "0"}" title="1 ədəd azalt">−</button>
             </span>
           `
           )
@@ -1928,12 +2100,25 @@ function renderWaiterExpressView() {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const targetItemId = btn.getAttribute("data-item-id");
+            const isCustomChip = btn.getAttribute("data-is-custom") === "1";
             if (targetItemId) {
-              const cur = Number(table.orders[targetItemId]) || 0;
-              if (cur <= 1) {
-                delete table.orders[targetItemId];
+              if (isCustomChip && Array.isArray(table.customOrders)) {
+                const cIdx = table.customOrders.findIndex((c) => c.id === targetItemId);
+                if (cIdx !== -1) {
+                  const cur = Number(table.customOrders[cIdx].qty) || 0;
+                  if (cur <= 1) {
+                    table.customOrders.splice(cIdx, 1);
+                  } else {
+                    table.customOrders[cIdx].qty = cur - 1;
+                  }
+                }
               } else {
-                table.orders[targetItemId] = cur - 1;
+                const cur = Number(table.orders[targetItemId]) || 0;
+                if (cur <= 1) {
+                  delete table.orders[targetItemId];
+                } else {
+                  table.orders[targetItemId] = cur - 1;
+                }
               }
               table.updatedAt = Date.now();
               saveState({ changedTableIds: [table.id] });
@@ -2048,6 +2233,30 @@ function renderWaiterExpressView() {
       renderWaiterExpressView();
     });
     wexpFoodGridEl.appendChild(otherBtn);
+
+    // Ofisiant üçün [✍️ Servis / Qiymət] kartı (Sərbəst ad və qiymət yazmaq üçün)
+    const customPadCount = Object.values(waiterPadCart).reduce(
+      (sum, v) => (v && typeof v === "object" && v.isCustom ? sum + (Number(v.qty) || 0) : sum),
+      0
+    );
+    const customServiceBtn = document.createElement("div");
+    customServiceBtn.className = `wexp-item-card accent-amber ${customPadCount > 0 ? "is-selected" : ""}`;
+    customServiceBtn.innerHTML = `
+      <div class="wexp-card-left">
+        <span class="wexp-card-emoji">✍️</span>
+        <div class="wexp-card-meta">
+          <span class="wexp-card-name">Servis / Qiymət</span>
+          <span class="wexp-card-price">Özün yaz ₼</span>
+        </div>
+      </div>
+      <div class="wexp-card-right">
+        ${customPadCount > 0 ? `<span class="wexp-card-qty">${customPadCount}</span>` : ""}
+      </div>
+    `;
+    customServiceBtn.addEventListener("click", () => {
+      openCustomItemModal("waiter_pad");
+    });
+    wexpFoodGridEl.appendChild(customServiceBtn);
 
     if (wexpOtherMenuDrawerEl) {
       if (isWaiterOtherDrawerOpen) {
@@ -2690,7 +2899,7 @@ function renderQuickMenu(table) {
       </div>
       <span class="menu-btn-price">Xüsusi məbləğ ₼</span>
     `;
-    customBtn.addEventListener("click", openCustomItemModal);
+    customBtn.addEventListener("click", () => openCustomItemModal("table"));
     quickMenuGridEl.appendChild(customBtn);
   } else {
     const currentCatObj = MENU_CATEGORIES.find((c) => c.id === activeCategory);
@@ -2946,10 +3155,13 @@ function updateCustomItemQty(tableId, customId, delta) {
   renderTableScreen();
 }
 
-// Sərbəst Qiymət Modalını açmaq / bağlamaq
-function openCustomItemModal() {
+// Sərbəst Qiymət Modalını açmaq / bağlamaq ("table" | "window" | "waiter_pad")
+let currentCustomModalTarget = "table";
+
+function openCustomItemModal(targetMode = "table") {
+  currentCustomModalTarget = (targetMode === "window" || targetMode === "waiter_pad") ? targetMode : "table";
   customItemForm.reset();
-  customItemNameInput.value = "Əlavə sifariş";
+  customItemNameInput.value = currentCustomModalTarget === "window" ? "Servis / Əlavə" : "Əlavə sifariş";
   customItemModal.classList.add("open");
   customItemModal.setAttribute("aria-hidden", "false");
   setTimeout(() => customItemPriceInput.focus(), 80);
@@ -2962,12 +3174,33 @@ function closeCustomItemModal() {
 
 customItemForm.addEventListener("submit", (e) => {
   e.preventDefault();
+  const name = customItemNameInput.value.trim() || (currentCustomModalTarget === "window" ? "Servis / Əlavə" : "Əlavə sifariş");
+  const price = round2(parseFloat(customItemPriceInput.value));
+  if (!price || price <= 0) return;
+
+  if (currentCustomModalTarget === "window") {
+    addWindowCustomItem(name, price);
+    closeCustomItemModal();
+    return;
+  }
+
+  if (currentCustomModalTarget === "waiter_pad") {
+    const customId = `custom_pad_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+    waiterPadCart[customId] = {
+      isCustom: true,
+      id: customId,
+      name,
+      price,
+      qty: 1
+    };
+    closeCustomItemModal();
+    renderWaiterExpressView();
+    showToast(`➕ "${name}" (${formatMoney(price)}) seçildi — aşağıdan masa və ya Pəncərə seçin!`);
+    return;
+  }
+
   const table = state.tables.find((t) => t.id === activeTableId);
   if (!table) return;
-
-  const name = customItemNameInput.value.trim() || "Əlavə sifariş";
-  const price = round2(parseFloat(customItemPriceInput.value));
-  if (price <= 0) return;
 
   if (!Array.isArray(table.customOrders)) {
     table.customOrders = [];
@@ -2985,6 +3218,22 @@ customItemForm.addEventListener("submit", (e) => {
   closeCustomItemModal();
   renderTableScreen();
 });
+
+const windowQuickCustomFormEl = document.getElementById("windowQuickCustomForm");
+const windowCustomNameInputEl = document.getElementById("windowCustomNameInput");
+const windowCustomPriceInputEl = document.getElementById("windowCustomPriceInput");
+
+if (windowQuickCustomFormEl) {
+  windowQuickCustomFormEl.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const rawName = windowCustomNameInputEl ? windowCustomNameInputEl.value : "";
+    const rawPrice = windowCustomPriceInputEl ? windowCustomPriceInputEl.value : "";
+    if (addWindowCustomItem(rawName, rawPrice)) {
+      if (windowCustomNameInputEl) windowCustomNameInputEl.value = "";
+      if (windowCustomPriceInputEl) windowCustomPriceInputEl.value = "";
+    }
+  });
+}
 
 // ============================================================================
 // 2A. MASA KÖÇÜRMƏ FUNKSİYASI ("🔄 Masanı Köçür" — Boş masaya köçür / Dolu masaya birləşdir)
@@ -4897,6 +5146,9 @@ function renderReportModal() {
         allSoldRows.push({ name: `[Pəncərə] ${item.name}`, qty, unit: "ədəd", price: item.price, total: round2(qty * item.price) });
       }
     });
+    (state.windowSoldCustomItems || []).forEach((c) => {
+      allSoldRows.push({ name: `[Pəncərə] ${c.name}`, qty: c.qty || 1, unit: "ədəd", price: c.price, total: round2(c.total || 0) });
+    });
 
     if (allSoldRows.length === 0) {
       reportAllSoldItemsList.innerHTML = `<div class="mini-empty">Bu gün hələ heç bir satış qeydə alınmayıb.</div>`;
@@ -5129,14 +5381,15 @@ function renderReportModal() {
     }
   }
 
-  // Pəncərə Satılan Məhsullar (Dürmək və Peraşki Sayı — '✕' ilə silmək imkanı)
+  // Pəncərə Satılan Məhsullar (Dürmək, Peraşki və Servis/Sərbəst — '✕' ilə silmək imkanı)
   if (reportWindowSoldItemsEl) {
     reportWindowSoldItemsEl.innerHTML = "";
     const winSoldItems = WINDOW_MENU_CATALOG.filter(
       (item) => (Number((state.windowSoldSummary || {})[item.id]) || 0) > 0
     );
+    const winSoldCustoms = Array.isArray(state.windowSoldCustomItems) ? state.windowSoldCustomItems : [];
 
-    if (winSoldItems.length === 0) {
+    if (winSoldItems.length === 0 && winSoldCustoms.length === 0) {
       reportWindowSoldItemsEl.innerHTML = `<div class="mini-empty">Bu gün hələ pəncərə satışı olmayıb.</div>`;
     } else {
       winSoldItems.forEach((item) => {
@@ -5154,6 +5407,18 @@ function renderReportModal() {
         row.querySelector(".delete-record-btn").addEventListener("click", () => {
           deleteWindowSoldItem(item.id);
         });
+        reportWindowSoldItemsEl.appendChild(row);
+      });
+
+      winSoldCustoms.forEach((custom) => {
+        const row = document.createElement("div");
+        row.className = "mini-row";
+        row.innerHTML = `
+          <span>✍️ ${custom.name}: <strong>${custom.qty || 1} ədəd</strong></span>
+          <div class="bill-right-actions">
+            <strong>${formatMoney(custom.total)}</strong>
+          </div>
+        `;
         reportWindowSoldItemsEl.appendChild(row);
       });
     }
@@ -5248,6 +5513,7 @@ function buildShiftArchiveRecord(targetState, customDateLabel) {
     soldItemsSummary: { ...(targetState.soldItemsSummary || {}) },
     soldCustomItems: [...(targetState.soldCustomItems || [])],
     windowSoldSummary: { ...(targetState.windowSoldSummary || {}) },
+    windowSoldCustomItems: [...(targetState.windowSoldCustomItems || [])],
     expenses: [...(targetState.expenses || [])],
     closedBills: [...(targetState.closedBills || [])],
     atmTransfers: [...(targetState.atmTransfers || [])]
@@ -5618,6 +5884,14 @@ function renderArchiveModal() {
           </div>
         `);
       }
+    });
+    (entry.windowSoldCustomItems || []).forEach((custom) => {
+      soldWinRows.push(`
+        <div class="mini-row">
+          <span>✍️ ${custom.name}: <strong>${custom.qty || 1} ədəd</strong></span>
+          <strong>${formatMoney(custom.total)}</strong>
+        </div>
+      `);
     });
 
     // Ofisiant statistikası
