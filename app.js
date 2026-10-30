@@ -5533,10 +5533,12 @@ function checkAndExecuteAutoEndDay() {
 // 2 MƏRHƏLƏLİ TƏHLÜKƏSİZLİK KİLİDİ ('SİL' TƏSDİQİ İLƏ)
 // ============================================================================
 let pendingDangerAction = null;
+let pendingDangerRequiresWord = true;
 
 function openDangerConfirmModal({ title, text, buttonText, requiresWord = true, onConfirm }) {
   if (!dangerConfirmModal) return;
   pendingDangerAction = onConfirm;
+  pendingDangerRequiresWord = Boolean(requiresWord);
 
   if (dangerConfirmTitle) {
     dangerConfirmTitle.innerHTML = title || "DİQQƏT: Bu əməliyyat geri qaytarılmır!";
@@ -5571,6 +5573,7 @@ function closeDangerConfirmModal() {
   dangerConfirmModal.classList.remove("open");
   dangerConfirmModal.setAttribute("aria-hidden", "true");
   pendingDangerAction = null;
+  pendingDangerRequiresWord = true;
   if (dangerConfirmInput) {
     dangerConfirmInput.value = "";
   }
@@ -7247,9 +7250,13 @@ if (endDayResetBtn) {
 // 2 Mərhələli Təhlükəsizlik Kilidi Dinləyiciləri
 if (dangerConfirmInput) {
   dangerConfirmInput.addEventListener("input", () => {
+    if (!pendingDangerRequiresWord) {
+      if (dangerExecuteBtn) dangerExecuteBtn.disabled = false;
+      return;
+    }
     const val = dangerConfirmInput.value.trim().toUpperCase();
     if (dangerExecuteBtn) {
-      dangerExecuteBtn.disabled = val !== "SİL";
+      dangerExecuteBtn.disabled = val !== "SİL" && val !== "SIL";
     }
   });
 
@@ -7266,8 +7273,10 @@ if (dangerCancelBtn) {
 
 if (dangerExecuteBtn) {
   dangerExecuteBtn.addEventListener("click", () => {
-    const val = dangerConfirmInput ? dangerConfirmInput.value.trim().toUpperCase() : "";
-    if (val !== "SİL") return;
+    if (pendingDangerRequiresWord) {
+      const val = dangerConfirmInput ? dangerConfirmInput.value.trim().toUpperCase() : "";
+      if (val !== "SİL" && val !== "SIL") return;
+    }
     const action = pendingDangerAction;
     closeDangerConfirmModal();
     if (typeof action === "function") {
